@@ -1,3 +1,6 @@
+# TODO: CUDA 11.8 -> 12.x 업그레이드 필요 (GPU 동작 위함)
+# TODO: tiny 모델 대신 다른 무거운 모델 사용 가능
+
 import os
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
