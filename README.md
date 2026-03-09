@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/ccoli.png" alt="ccoli logo" width="200" />
+<img src="assets/ccoli.png" alt="ccoli logo" />
 
 # 🥦 ccoli
 
