@@ -1,114 +1,94 @@
-# ccoli
+<div align="center">
 
-![ccoli logo](assets/ccoli.png)
+<img src="assets/ccoli.png" alt="ccoli logo" width="200" />
 
-`ccoli` is a voice-first Arduino + Python assistant that lets you talk to an **Atom Echo ESP32** device and have a **PC-hosted server** handle speech, reasoning, and responses.
+# 🥦 ccoli
 
-It is built for maker-friendly local experiments with:
-- STT (Speech-to-Text)
-- LLM-based reasoning (local Ollama or external API)
-- TTS (Text-to-Speech)
-- Device-side actions (voice playback today, robot actions in progress)
+**Talk to your ESP32. Let your PC think.**
 
-![ccoli summary](assets/summary.png)
+Voice-first AI assistant for Arduino makers — speak to an Atom Echo, get intelligent responses powered by local or cloud LLMs.
 
-## Project Status
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](LICENSE)
 
-- **Agent mode**: Available now
-- **Robot mode**: In development
+[Quick Start](#-quick-start) · [Features](#-features) · [Docs](docs/) · [QUICKSTART.md](QUICKSTART.md)
 
-Robot mode is intended for servo/display style actions and is controlled by feature flags in server config.
+</div>
 
-## At a Glance
+---
 
-### What you need
+## 💡 What is ccoli?
 
-| Component | Purpose |
-|-----------|---------|
-| **PC** (Windows/Mac/Linux) | Runs the `ccoli` server, handles STT/LLM/TTS |
-| **Atom Echo ESP32 module** | Captures voice input and plays audio responses |
-| **Same local Wi-Fi network** | Connects the PC and Atom Echo |
+ccoli turns an **M5Stack Atom Echo (ESP32)** into a voice assistant powered by your PC. You speak → the device sends audio over Wi-Fi → your PC handles speech recognition, LLM reasoning, and text-to-speech → the device plays back the response.
 
-```text
-[PC]
-  ├─ Run ccoli server
-  └─ Upload firmware via Arduino IDE or Arduino CLI
+No cloud required. Runs with local Ollama out of the box, or connect to Gemini / Claude / ChatGPT.
 
-[Atom Echo ESP32 module]
-  └─ Captures voice and plays responses
-```
+<div align="center">
+<img src="assets/summary.png" alt="ccoli system overview" width="700" />
+</div>
 
-### How the system works
+## ✅ What You Need
 
-1. User speaks to Atom Echo.
-2. Atom Echo sends audio over local Wi-Fi to the PC server.
-3. Server performs STT.
-4. Server sends recognized text to an LLM backend (Ollama local model or API model).
-5. Depending on mode (agent or robot), server selects response/action policy.
-6. Server returns output to Atom Echo:
-   - TTS audio response (agent flow)
-   - or control payload for robot actions (robot flow, in progress)
-7. Atom Echo executes playback and/or device action.
+| | Component | Why |
+|---|-----------|-----|
+| 🖥️ | **PC** (Windows / Mac / Linux) | Runs the ccoli server (STT + LLM + TTS) |
+| 🎤 | **M5Stack Atom Echo** (ESP32) | Captures your voice & plays responses |
+| 📶 | **Same Wi-Fi network** | Connects the two devices |
 
-### Connection Diagram
+## 🚀 Quick Start
 
-```mermaid
-flowchart LR
-    U["User voice"] --> A["Atom Echo ESP32"];
-    A -->|Audio over WiFi LAN| S["PC: ccoli server"];
-    S -->|STT text| L["LLM backend<br/>Ollama local or API"];
-    L -->|Reasoning result| S;
-    S -->|Mode policy: Agent or Robot| D["Decision layer"];
-    D -->|TTS response| A;
-    D -->|Robot control payload| A;
-```
-
-## Quick Start
-
-### Step 1. Install dependencies
+### 1. Install
 
 ```bash
 pip install -r server/requirements.txt
 pip install -e .
 ```
 
-### Step 2. Configure Wi-Fi and server port
-
-```bash
-ccoli config wifi <SSID> password <PASSWORD> port <PORT> [mode wifi|wired]
-```
-
-Example:
+### 2. Configure
 
 ```bash
 ccoli config wifi MyHomeWiFi password MySecretPass port 5001
 ```
 
-This updates both `server/config.yaml` and `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` automatically.
+Then set `SERVER_IP` in `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` to your PC's local IP.
 
-Then set `SERVER_IP` in `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` to your PC's local IP address.
+### 3. Flash firmware
 
-### Step 3. Flash Atom Echo firmware
+Open `arduino/atom_echo_m5stack_esp32_ino/atom_echo_m5stack_esp32_ino.ino` in Arduino IDE and upload to your Atom Echo.
 
-Open the sketch below in Arduino IDE (or use Arduino CLI) and upload to your Atom Echo:
-
-- `arduino/atom_echo_m5stack_esp32_ino/atom_echo_m5stack_esp32_ino.ino`
-
-Make sure `device_secrets.h` exists in the same directory before building.
-
-### Step 4. Start the server
+### 4. Start
 
 ```bash
 ccoli start
 ```
 
-That's it — speak to the Atom Echo and the server will respond with voice.
+🎉 That's it — speak to the Atom Echo and hear the response!
 
-## Optional Configuration
+## 🏗️ How It Works
 
-### LLM provider (Ollama / Gemini / Claude / ChatGPT)
+```mermaid
+flowchart LR
+    U["🗣️ You"] --> A["🎤 Atom Echo"]
+    A -->|Audio over Wi-Fi| S["🖥️ ccoli server"]
+    S -->|Text| L["🧠 LLM\nOllama / Gemini / Claude / ChatGPT"]
+    L -->|Response| S
+    S -->|TTS audio| A
+```
 
-Default provider is Ollama (runs locally, no API key needed). Switch provider and model from CLI:
+## ✨ Features
+
+- 🗣️ **Voice-first** — speak naturally, get voice responses
+- 🧠 **Multi-LLM** — Ollama (local, default), Gemini, Claude, ChatGPT
+- 🔌 **Integrations** — weather, calendar, search, maps, notifications
+- 🎙️ **Voice ID** — speaker recognition to personalize responses
+- 🤖 **Robot mode** *(coming soon)* — servo/display control via voice
+- 🐳 **Docker tests** — reproducible test suite out of the box
+
+## ⚙️ Configuration
+
+<details>
+<summary><b>LLM Provider</b></summary>
+
+Default is Ollama (local, no API key). Switch anytime:
 
 ```bash
 ccoli config llm --provider ollama --model qwen3:8b
@@ -117,165 +97,102 @@ ccoli config llm --provider claude --model claude-3-5-haiku-latest --api-key <AN
 ccoli config llm --provider chatgpt --model gpt-4o-mini --api-key <OPENAI_API_KEY>
 ```
 
-When Ollama is selected, `ccoli` automatically installs Ollama if missing, starts the server, and pulls the selected model.
+Ollama is auto-installed and auto-started if missing.
 
-### Integrations (weather / search / calendar / notify / maps)
+</details>
+
+<details>
+<summary><b>Integrations</b></summary>
 
 ```bash
-# List all integrations and their status
-ccoli config integration list
+ccoli config integration list                          # see all integrations
+ccoli config integration set weather --api-key <KEY>   # configure
+ccoli config integration enable weather                # enable
+ccoli config integration test weather                  # verify
+```
 
-# Set up weather integration
-ccoli config integration set weather --api-key <WEATHER_API_KEY>
-ccoli config integration enable weather
-ccoli config integration test weather
+Google Calendar example:
 
-# Set up Google Calendar integration
+```bash
 ccoli config integration set calendar-google \
-  --client-id <GOOGLE_CLIENT_ID> \
-  --client-secret <GOOGLE_CLIENT_SECRET> \
-  --refresh-token <GOOGLE_REFRESH_TOKEN>
+  --client-id <ID> --client-secret <SECRET> --refresh-token <TOKEN>
 ccoli config integration test calendar-google
 ```
 
-If a required key is missing, the test command will tell you exactly what to set:
+Missing keys? The `test` command tells you exactly what to set.
+
+</details>
+
+<details>
+<summary><b>Voice ID</b></summary>
 
 ```bash
-$ ccoli config integration test weather
-error: missing env key `WEATHER_API_KEY`. run `ccoli config integration set weather --api-key ...`
-```
-
-### Voice ID
-
-Manage speaker recognition from CLI:
-
-```bash
-ccoli config voice-id status
 ccoli config voice-id enable
 ccoli config voice-id threshold --value 0.72
-ccoli config voice-id delete --user <USERNAME>
-ccoli config voice-id disable
+ccoli config voice-id status
 ```
 
-You can also control Voice ID at runtime via voice commands:
+Or control via voice at runtime:
 
-```text
+```
 @@<USERNAME> register voice
 @@enable voice recognition
-@@<USERNAME> delete voice
-@@disable voice recognition
 ```
 
-## Testing
+</details>
 
-### Docker (recommended)
-
-Run the full test suite in a reproducible Docker environment:
-
-```bash
-docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from server-test
-```
-
-The `server-test` container runs all unit, integration, CLI, and scenario tests from `server/tests`.
-
-Optional helper script:
-
-```bash
-./scripts/run_docker_tests.sh
-```
-
-### CI (GitHub Actions)
-
-If Docker is unavailable locally, the same tests run on GitHub Actions:
-
-- Workflow: `.github/workflows/docker-tests.yml`
-- Triggers: `pull_request`, `push(main)`, `workflow_dispatch`
-
-## CLI Commands
+## 📋 CLI Reference
 
 | Command | Description |
 |---------|-------------|
 | `ccoli start` | Start the server |
-| `ccoli start --port 5002` | Start with a temporary port override |
-| `ccoli config wifi <SSID> password <PASS> port <PORT>` | Configure Wi-Fi/port for server + firmware |
-| `ccoli config llm --provider <name> [--model <m>] [--api-key <k>]` | Set LLM provider and model |
-| `ccoli config integration <list\|set\|enable\|disable\|test> ...` | Manage integration credentials |
-| `ccoli config voice-id <status\|enable\|disable\|delete\|threshold> ...` | Manage Voice ID settings |
+| `ccoli start --port 5002` | Start with port override |
+| `ccoli config wifi <SSID> password <PASS> port <PORT>` | Configure Wi-Fi + port |
+| `ccoli config llm --provider <name> [--model <m>] [--api-key <k>]` | Set LLM provider |
+| `ccoli config integration <list\|set\|enable\|disable\|test>` | Manage integrations |
+| `ccoli config voice-id <status\|enable\|disable\|delete\|threshold>` | Manage Voice ID |
 
-## Repository Layout
-
-```text
-.
-+-- arduino/
-|   +-- atom_echo_m5stack_esp32_ino/
-|       +-- atom_echo_m5stack_esp32_ino.ino
-|       +-- config.h
-|       +-- config.h.example
-|       +-- device_secrets.h.example
-+-- ccoli/
-|   +-- cli.py
-+-- docs/
-|   +-- API.md
-|   +-- PROTOCOL.md
-|   +-- PRD.md
-|   +-- AGENT_FEATURE_PLANNING.md
-|   +-- assets/
-|       +-- ccoli-logo.svg
-|       +-- ccoli-character.svg
-+-- server/
-|   +-- server.py
-|   +-- config.yaml
-|   +-- src/
-+-- QUICKSTART.md
-```
-
-## Configuration
-
-- Server defaults: `server/config.yaml`
-- Environment overrides: `server/.env` (see `server/env.example`)
-- Robot mode feature gate:
-  - `server/config.yaml` → `features.robot_mode_enabled`
-  - default: `false`
-
-## Security Notes
-
-- Never commit real credentials in firmware files.
-- Store local secrets in `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` (git-ignored by default).
-
-## Documentation
-
-- Quick onboarding: `QUICKSTART.md`
-- Server module map: `docs/API.md`
-- Binary protocol details: `docs/PROTOCOL.md`
-- Product requirements: `docs/PRD.md`
-- Execution planning: `docs/AGENT_FEATURE_PLANNING.md`
-
-## Codex Superpowers Setup
-
-This project uses the [obra/superpowers](https://github.com/obra/superpowers) workflow. Codex auto-discovers skills from `~/.agents/skills/`. Install with:
+## 🧪 Testing
 
 ```bash
-./scripts/setup_codex_superpowers.sh
+# Docker (recommended)
+docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from server-test
+
+# or use the helper script
+./scripts/run_docker_tests.sh
 ```
 
-After installation, restart Codex to activate TDD, brainstorming, writing-plans, and other skills.
+CI runs the same suite on every PR via GitHub Actions (`.github/workflows/docker-tests.yml`).
 
-## Planning/PRD Templates
+## 📁 Project Structure
 
-- PRD template: `docs/PRD_TEMPLATE.md`
-- Planning template: `docs/PLANNING_TEMPLATE.md`
-- Feature planning board: `docs/AGENT_FEATURE_PLANNING.md`
-
-## Mock Services
-
-```bash
-docker compose -f docker/docker-compose.mock-services.yml up
+```
+ccoli/
+├── arduino/          # Atom Echo ESP32 firmware
+├── ccoli/            # CLI entry point
+├── server/           # Python server (STT / LLM / TTS)
+│   ├── server.py
+│   ├── config.yaml
+│   └── src/
+├── docs/             # API, protocol, PRD docs
+├── docker/           # Docker Compose for tests & mocks
+└── scripts/          # Helper scripts
 ```
 
-## Telegram Channel
+## 📖 Documentation
 
-Operations guide: `docs/TELEGRAM_CHANNEL_GUIDE.md`
+| Doc | What's inside |
+|-----|---------------|
+| [QUICKSTART.md](QUICKSTART.md) | Quick onboarding guide |
+| [docs/API.md](docs/API.md) | Server module map |
+| [docs/PROTOCOL.md](docs/PROTOCOL.md) | Binary protocol spec |
+| [docs/PRD.md](docs/PRD.md) | Product requirements |
 
-## License
+## 🔒 Security
 
-CC BY-NC 4.0. Commercial use requires prior written permission. See `LICENSE`.
+- Never commit real credentials — use `device_secrets.h` (git-ignored)
+- Server secrets go in `server/.env` (see `server/env.example`)
+
+## 📜 License
+
+[CC BY-NC 4.0](LICENSE) — free for non-commercial use. Commercial use requires prior written permission.
