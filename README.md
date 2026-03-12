@@ -8,7 +8,7 @@
 
 Voice-first AI assistant for Arduino makers — speak to an Atom Echo, get intelligent responses powered by local or cloud LLMs.
 
-[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 
 [Quick Start](#-quick-start) · [Features](#-features) · [Docs](docs/) · [QUICKSTART.md](QUICKSTART.md)
 
@@ -195,4 +195,4 @@ ccoli/
 
 ## 📜 License
 
-[CC BY-NC 4.0](LICENSE) — free for non-commercial use. Commercial use requires prior written permission.
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
