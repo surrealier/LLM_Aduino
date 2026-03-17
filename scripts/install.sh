@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${CCOLI_GIT_URL:-https://github.com/surrealier/LLM_Aduino.git}"
+REPO_URL="${CCOLI_GIT_URL:-https://github.com/surrealier/ccoli.git}"
 REPO_REF="${CCOLI_GIT_REF:-main}"
 PYTHON_BIN="${CCOLI_PYTHON:-python3}"
 INSTALL_SOURCE="${CCOLI_INSTALL_SOURCE:-auto}"
