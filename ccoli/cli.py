@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import re
 import shutil
@@ -9,10 +10,20 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
 
 import yaml
+
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+except ImportError:  # pragma: no cover - rich is optional at bootstrap time
+    Console = None
+    Panel = None
+    Table = None
 
 
 DEFAULT_SERVER_PORT = 5001
@@ -51,6 +62,44 @@ INTEGRATION_SPECS = {
         "description": "지도/경로 조회",
     },
 }
+
+API_PROVIDERS = ("gemini", "claude", "chatgpt")
+INSTALL_TARGETS = {
+    "ollama": {
+        "title": "Ollama Local",
+        "description": "Run a local LLM with Ollama on this machine.",
+        "provider": "ollama",
+        "extras": ("runtime",),
+    },
+    "api": {
+        "title": "Cloud API",
+        "description": "Use Gemini, Claude, or ChatGPT with an API key.",
+        "provider": None,
+        "extras": ("runtime",),
+    },
+    "manual": {
+        "title": "Configure Later",
+        "description": "Install the runtime now and keep the current LLM config.",
+        "provider": None,
+        "extras": ("runtime",),
+    },
+}
+
+
+@dataclass(frozen=True)
+class SetupChoice:
+    install_target: str
+    provider: str
+    model: str
+    api_key: Optional[str]
+    stt_device: str
+    install_extras: tuple[str, ...]
+
+    @property
+    def base_url(self) -> str:
+        if self.provider == "ollama":
+            return "http://localhost:11434"
+        return ""
 
 
 def _repo_root() -> Path:
@@ -112,6 +161,210 @@ def _validate_port(port: int) -> int:
     if not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
     return port
+
+
+def _console() -> Optional["Console"]:
+    if Console is None:
+        return None
+    return Console()
+
+
+def _print_setup_banner() -> None:
+    console = _console()
+    message = (
+        "Choose how ccoli should install and configure your AI runtime.\n"
+        "We keep the base install light, then add only the runtime packages you actually need."
+    )
+    if console and Panel is not None:
+        console.print(Panel.fit(message, title="ccoli Setup", border_style="green"))
+        if sys.platform == "darwin":
+            console.print("[bold cyan]macOS tip:[/bold cyan] defaulting STT to CPU and skipping torch/transformers.")
+        return
+    print("== ccoli Setup ==")
+    print(message)
+    if sys.platform == "darwin":
+        print("macOS tip: defaulting STT to CPU and skipping torch/transformers.")
+
+
+def _default_stt_device() -> str:
+    if sys.platform == "darwin":
+        return "cpu"
+    return "cuda"
+
+
+def _prompt_text(message: str, default: Optional[str] = None, secret: bool = False) -> str:
+    prompt_suffix = f" [{default}]" if default else ""
+    prompt = f"{message}{prompt_suffix}: "
+    if secret:
+        value = getpass.getpass(prompt)
+    else:
+        value = input(prompt)
+    value = value.strip()
+    if value:
+        return value
+    return default or ""
+
+
+def _prompt_confirm(message: str, default: bool = True) -> bool:
+    hint = "Y/n" if default else "y/N"
+    while True:
+        value = input(f"{message} [{hint}]: ").strip().lower()
+        if not value:
+            return default
+        if value in {"y", "yes"}:
+            return True
+        if value in {"n", "no"}:
+            return False
+        print("Please enter y or n.")
+
+
+def _prompt_select(message: str, options: Sequence[tuple[str, str]], default_index: int = 0) -> str:
+    console = _console()
+    if console and Table is not None:
+        table = Table(title=message, show_header=True, header_style="bold green")
+        table.add_column("#", style="bold")
+        table.add_column("Option")
+        table.add_column("Details")
+        for idx, (value, label) in enumerate(options, start=1):
+            table.add_row(str(idx), value, label)
+        console.print(table)
+    else:
+        print(message)
+        for idx, (value, label) in enumerate(options, start=1):
+            print(f"  {idx}. {value} - {label}")
+
+    while True:
+        raw = _prompt_text("Select", default=str(default_index + 1))
+        try:
+            selected = int(raw)
+        except ValueError:
+            print("Please enter the option number.")
+            continue
+        if 1 <= selected <= len(options):
+            return options[selected - 1][0]
+        print(f"Please choose a number between 1 and {len(options)}.")
+
+
+def _render_setup_summary(choice: SetupChoice, skip_install: bool) -> None:
+    console = _console()
+    extras = ", ".join(choice.install_extras) or "(none)"
+    install_action = "skip pip install" if skip_install else f"pip install -e .[{extras}]"
+    if console and Table is not None:
+        table = Table(title="Setup Plan", show_header=False, box=None)
+        table.add_column("Field", style="bold green")
+        table.add_column("Value")
+        table.add_row("Install target", choice.install_target)
+        table.add_row("Provider", choice.provider)
+        table.add_row("Model", choice.model)
+        table.add_row("STT device", choice.stt_device)
+        table.add_row("Python extras", extras)
+        table.add_row("Install action", install_action)
+        table.add_row("API key", "saved to server/.env" if choice.api_key else "not provided")
+        console.print(table)
+        return
+    print("Setup plan:")
+    print(f"- Install target: {choice.install_target}")
+    print(f"- Provider: {choice.provider}")
+    print(f"- Model: {choice.model}")
+    print(f"- STT device: {choice.stt_device}")
+    print(f"- Python extras: {extras}")
+    print(f"- Install action: {install_action}")
+    print(f"- API key: {'saved to server/.env' if choice.api_key else 'not provided'}")
+
+
+def _build_setup_choice(
+    install_target: str,
+    provider: Optional[str],
+    model: Optional[str],
+    api_key: Optional[str],
+    stt_device: Optional[str],
+) -> SetupChoice:
+    normalized_target = (install_target or "").strip().lower()
+    if normalized_target not in INSTALL_TARGETS:
+        raise ValueError(f"unsupported install target: {install_target}")
+
+    if normalized_target == "manual":
+        resolved_provider = (provider or "ollama").strip().lower()
+    elif normalized_target == "api":
+        resolved_provider = (provider or "").strip().lower()
+        if resolved_provider not in API_PROVIDERS:
+            raise ValueError("api install target requires provider: gemini, claude, or chatgpt")
+    else:
+        resolved_provider = "ollama"
+
+    if resolved_provider not in DEFAULT_LLM_MODELS:
+        raise ValueError(f"unsupported provider: {resolved_provider}")
+
+    resolved_device = (stt_device or _default_stt_device()).strip().lower()
+    if resolved_device not in {"cpu", "cuda"}:
+        raise ValueError("stt_device must be `cpu` or `cuda`")
+
+    resolved_model = (model or DEFAULT_LLM_MODELS[resolved_provider]).strip()
+    resolved_key = (api_key or "").strip() or None
+    extras = tuple(INSTALL_TARGETS[normalized_target]["extras"])
+    return SetupChoice(
+        install_target=normalized_target,
+        provider=resolved_provider,
+        model=resolved_model,
+        api_key=resolved_key,
+        stt_device=resolved_device,
+        install_extras=extras,
+    )
+
+
+def _prompt_setup_choice(default_target: Optional[str], stt_device: Optional[str]) -> SetupChoice:
+    _print_setup_banner()
+    options = [
+        ("ollama", "Local model on your machine via Ollama"),
+        ("api", "Gemini / Claude / ChatGPT via API key"),
+        ("manual", "Install runtime now and configure LLM later"),
+    ]
+    target = _prompt_select(
+        "Choose your AI path",
+        options,
+        default_index=0 if default_target in (None, "ollama") else [opt[0] for opt in options].index(default_target),
+    )
+
+    provider = None
+    if target == "api":
+        provider_options = [
+            ("gemini", "Google Gemini"),
+            ("claude", "Anthropic Claude"),
+            ("chatgpt", "OpenAI ChatGPT"),
+        ]
+        provider = _prompt_select("Choose your cloud provider", provider_options, default_index=0)
+    elif target == "manual":
+        provider = _prompt_select(
+            "Optional default provider",
+            [
+                ("ollama", "Keep local Ollama as the default"),
+                ("gemini", "Prepare for Gemini"),
+                ("claude", "Prepare for Claude"),
+                ("chatgpt", "Prepare for ChatGPT"),
+            ],
+            default_index=0,
+        )
+
+    resolved_provider = provider or "ollama"
+    model = _prompt_text("Model name", default=DEFAULT_LLM_MODELS[resolved_provider])
+    api_key = None
+    if target == "api":
+        api_key = _prompt_text("API key (leave blank to set later)", secret=True)
+    device = _prompt_select(
+        "Choose STT device",
+        [
+            ("cpu", "Best default for macOS and general compatibility"),
+            ("cuda", "Use NVIDIA CUDA when available"),
+        ],
+        default_index=0 if (stt_device or _default_stt_device()) == "cpu" else 1,
+    )
+    return _build_setup_choice(target, provider, model, api_key, device)
+
+
+def _editable_install_spec(extras: Sequence[str]) -> str:
+    if not extras:
+        return "."
+    return f".[{','.join(extras)}]"
 
 
 def _load_yaml_dict(path: Path) -> dict:
@@ -238,6 +491,56 @@ def _configure_llm(root: Path, provider: str, model: str, base_url: Optional[str
             print(f"updated: {env_path} ({env_key})")
 
     return config_path
+
+
+def _apply_setup_choice(root: Path, choice: SetupChoice) -> tuple[Path, Path]:
+    config_path = _configure_llm(root, choice.provider, choice.model, choice.base_url, choice.api_key)
+    config_data = _load_yaml_dict(config_path)
+
+    stt_cfg = config_data.setdefault("stt", {})
+    if not isinstance(stt_cfg, dict):
+        stt_cfg = {}
+        config_data["stt"] = stt_cfg
+    stt_cfg["device"] = choice.stt_device
+
+    setup_cfg = config_data.setdefault("setup", {})
+    if not isinstance(setup_cfg, dict):
+        setup_cfg = {}
+        config_data["setup"] = setup_cfg
+    setup_cfg["install_target"] = choice.install_target
+    setup_cfg["provider"] = choice.provider
+    setup_cfg["python_extras"] = list(choice.install_extras)
+
+    _save_yaml_dict(config_path, config_data)
+    return config_path, _server_env_path(root)
+
+
+def _run_pip_install(root: Path, extras: Sequence[str]) -> int:
+    spec = _editable_install_spec(extras)
+    command = [sys.executable, "-m", "pip", "install", "-e", spec]
+    print(f"running: {' '.join(command)}")
+    try:
+        completed = subprocess.run(command, cwd=str(root), check=False)
+    except FileNotFoundError:
+        print("error: python/pip is not available in this environment", file=sys.stderr)
+        return 1
+    return completed.returncode
+
+
+def _prepare_ollama_model(choice: SetupChoice) -> int:
+    if choice.provider != "ollama":
+        return 0
+    if not _install_ollama_if_needed():
+        print("warning: ollama installation was skipped or failed; configure it manually later.", file=sys.stderr)
+        return 0
+    if not _ensure_ollama_server(choice.base_url):
+        print("warning: ollama server did not start automatically; configure it manually later.", file=sys.stderr)
+        return 0
+    pull = subprocess.run(["ollama", "pull", choice.model], check=False)
+    if pull.returncode != 0:
+        print(f"warning: failed to pull ollama model `{choice.model}`. You can retry later.", file=sys.stderr)
+        return 0
+    return 0
 
 
 def _load_env_vars(path: Path) -> dict[str, str]:
@@ -586,6 +889,59 @@ def _cmd_config_llm(provider: str, model: Optional[str], base_url: Optional[str]
     return 0
 
 
+def _cmd_setup(
+    install_target: Optional[str],
+    provider: Optional[str],
+    model: Optional[str],
+    api_key: Optional[str],
+    stt_device: Optional[str],
+    skip_install: bool,
+    yes: bool,
+) -> int:
+    root = _repo_root()
+
+    try:
+        if install_target:
+            choice = _build_setup_choice(install_target, provider, model, api_key, stt_device)
+        else:
+            if not sys.stdin.isatty():
+                print(
+                    "error: setup needs a TTY unless you pass --install-target and other options explicitly.",
+                    file=sys.stderr,
+                )
+                return 2
+            choice = _prompt_setup_choice(default_target=None, stt_device=stt_device)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    _render_setup_summary(choice, skip_install=skip_install)
+    if not yes and not _prompt_confirm("Continue with this setup plan?", default=True):
+        print("setup cancelled")
+        return 1
+
+    if not skip_install:
+        install_code = _run_pip_install(root, choice.install_extras)
+        if install_code != 0:
+            return install_code
+
+    config_path, env_path = _apply_setup_choice(root, choice)
+    if not skip_install:
+        _prepare_ollama_model(choice)
+
+    print(f"updated: {config_path}")
+    if choice.api_key:
+        print(f"updated: {env_path}")
+    if choice.provider == "ollama":
+        print(f"local provider configured: ollama ({choice.model})")
+    else:
+        if not choice.api_key:
+            print("warning: no API key saved yet. Add it to server/.env before starting the server.")
+        print(f"cloud provider configured: {choice.provider} ({choice.model})")
+    print("next: run `ccoli start` after flashing the device firmware.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ccoli")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -596,6 +952,42 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help=f"override server port for this run (default: {DEFAULT_SERVER_PORT})",
+    )
+
+    setup_parser = subparsers.add_parser(
+        "setup",
+        aliases=["install"],
+        help="interactive install/onboarding wizard",
+    )
+    setup_parser.add_argument(
+        "--install-target",
+        choices=tuple(INSTALL_TARGETS.keys()),
+        default=None,
+        help="choose `ollama`, `api`, or `manual` without interactive prompts",
+    )
+    setup_parser.add_argument(
+        "--provider",
+        choices=API_PROVIDERS + ("ollama",),
+        default=None,
+        help="provider override for non-interactive setup",
+    )
+    setup_parser.add_argument("--model", default=None, help="model name for the selected provider")
+    setup_parser.add_argument("--api-key", default=None, help="API key for cloud providers")
+    setup_parser.add_argument(
+        "--stt-device",
+        choices=("cpu", "cuda"),
+        default=None,
+        help="override STT device selection",
+    )
+    setup_parser.add_argument(
+        "--skip-install",
+        action="store_true",
+        help="only write configuration, skip pip installation",
+    )
+    setup_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="skip the final confirmation prompt",
     )
 
     config_parser = subparsers.add_parser("config", help="configure ccoli project settings")
@@ -659,6 +1051,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "start":
         return _cmd_start(args.port)
+    if args.command in {"setup", "install"}:
+        return _cmd_setup(
+            args.install_target,
+            args.provider,
+            args.model,
+            args.api_key,
+            args.stt_device,
+            args.skip_install,
+            args.yes,
+        )
     if args.command == "config" and args.config_command == "wifi":
         return _cmd_config_wifi(args.tokens)
     if args.command == "config" and args.config_command == "llm":
