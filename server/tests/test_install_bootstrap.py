@@ -34,8 +34,9 @@ def test_bootstrap_dry_run_prefers_local_repo_in_auto_mode():
     )
 
     assert result.returncode == 0
-    assert f"INSTALL_CMD={sys.executable} -m pip install --user -e {ROOT}" in result.stdout
-    assert "SETUP_CMD=ccoli setup" in result.stdout
+    assert f"INSTALL_CMD={sys.executable} -m pip install -e {ROOT}" in result.stdout
+    assert "NEXT_CMD=ccoli setup" in result.stdout
+    assert f"USER_BIN={Path.home() / '.local' / 'bin'}" in result.stdout
 
 
 def test_bootstrap_dry_run_can_force_remote_git_install():
@@ -51,4 +52,33 @@ def test_bootstrap_dry_run_can_force_remote_git_install():
 
     assert result.returncode == 0
     assert "git+https://example.com/demo.git@stable" in result.stdout
-    assert f"PYTHON_SETUP_CMD={sys.executable} -m ccoli setup" in result.stdout
+    assert f"FALLBACK_NEXT_CMD={sys.executable} -m ccoli setup" in result.stdout
+
+
+def test_bootstrap_dry_run_skips_user_install_inside_conda():
+    result = _run_bootstrap(
+        {
+            "CCOLI_DRY_RUN": "1",
+            "CCOLI_INSTALL_SOURCE": "auto",
+            "CCOLI_PYTHON": sys.executable,
+            "CONDA_PREFIX": "/tmp/fake-conda-env",
+        }
+    )
+
+    assert result.returncode == 0
+    assert f"INSTALL_CMD={sys.executable} -m pip install -e {ROOT}" in result.stdout
+
+
+def test_bootstrap_dry_run_uses_user_install_outside_env():
+    result = _run_bootstrap(
+        {
+            "CCOLI_DRY_RUN": "1",
+            "CCOLI_INSTALL_SOURCE": "auto",
+            "CCOLI_PYTHON": sys.executable,
+            "VIRTUAL_ENV": "",
+            "CONDA_PREFIX": "",
+        }
+    )
+
+    assert result.returncode == 0
+    assert f"INSTALL_CMD={sys.executable} -m pip install --user -e {ROOT}" in result.stdout
