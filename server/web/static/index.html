@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ccoli dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class' }</script>
+<style>
+  body { font-family: 'Courier New', monospace; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .tab-btn.active { border-bottom: 2px solid #60a5fa; color: #60a5fa; }
+  .log-ERROR { color: #f87171; }
+  .log-WARNING { color: #fbbf24; }
+  .log-INFO { color: #86efac; }
+  .log-DEBUG { color: #94a3b8; }
+  textarea { resize: vertical; }
+  .emotion-happy { background: #fef08a; color: #713f12; }
+  .emotion-excited { background: #f9a8d4; color: #831843; }
+  .emotion-sad { background: #93c5fd; color: #1e3a5f; }
+  .emotion-angry { background: #fca5a5; color: #7f1d1d; }
+  .emotion-sleepy { background: #c4b5fd; color: #2e1065; }
+  .emotion-neutral { background: #86efac; color: #14532d; }
+  .ws-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .ws-dot.connected { background: #4ade80; }
+  .ws-dot.disconnected { background: #f87171; }
+</style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<!-- Header -->
+<header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <span class="text-blue-400 font-bold text-lg">ccoli</span>
+    <span class="text-gray-500 text-sm">dashboard</span>
+  </div>
+  <div class="flex items-center gap-4 text-sm">
+    <span class="ws-dot disconnected" id="ws-dot"></span>
+    <span id="ws-label" class="text-gray-500">disconnected</span>
+    <span id="emotion-pill" class="emotion-neutral px-2 py-0.5 rounded text-xs font-bold">neutral</span>
+    <span id="mode-badge" class="bg-blue-900 text-blue-300 px-2 py-0.5 rounded text-xs">AGENT</span>
+  </div>
+</header>
+
+<!-- Tabs -->
+<nav class="bg-gray-900 border-b border-gray-800 px-6 flex gap-1 text-sm">
+  <button class="tab-btn active px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('overview')">Overview</button>
+  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('memory')">Memory</button>
+  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('conversation')">Conversation</button>
+  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('schedules')">Schedules</button>
+  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('chat')">Chat</button>
+  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('settings')">Settings</button>
+  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('logs')">Logs</button>
+</nav>
+
+<!-- Main -->
+<main class="p-6 max-w-6xl mx-auto">
+
+<!-- Overview Tab -->
+<div id="tab-overview" class="tab-content active">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      <div class="text-gray-400 text-xs mb-1">MODE</div>
+      <div id="ov-mode" class="text-2xl font-bold text-blue-400">—</div>
+    </div>
+    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      <div class="text-gray-400 text-xs mb-1">EMOTION</div>
+      <div id="ov-emotion" class="text-2xl font-bold">—</div>
+    </div>
+    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      <div class="text-gray-400 text-xs mb-1">CONVERSATIONS</div>
+      <div id="ov-conv-count" class="text-2xl font-bold text-green-400">—</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      <div class="text-gray-400 text-xs mb-2">PROACTIVE</div>
+      <div id="ov-proactive" class="text-sm text-gray-300 space-y-1"></div>
+    </div>
+    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+      <div class="text-gray-400 text-xs mb-2">TIMERS &amp; ALARMS</div>
+      <div id="ov-timers" class="text-sm text-gray-300"></div>
+    </div>
+  </div>
+
+  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+    <div class="text-gray-400 text-xs mb-2">RECENT ACTIVITY</div>
+    <div id="ov-activity" class="space-y-2 text-sm"></div>
+  </div>
+</div>
+
+<!-- Memory Tab -->
+<div id="tab-memory" class="tab-content">
+  <div class="flex gap-2 mb-4 flex-wrap">
+    <button class="mem-tab-btn bg-blue-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Soul.md')">Soul</button>
+    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('User.md')">User</button>
+    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Shortterm_Memory.md')">Shortterm</button>
+    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Longterm_Memory.md')">Longterm</button>
+    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Relation.md')">Relation</button>
+  </div>
+  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+    <div class="flex justify-between items-center mb-2">
+      <span id="mem-filename" class="text-blue-400 text-sm font-bold">Soul.md</span>
+      <div class="flex gap-2 items-center">
+        <span id="mem-charcount" class="text-gray-500 text-xs"></span>
+        <button onclick="saveMem()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">Save</button>
+      </div>
+    </div>
+    <textarea id="mem-editor" class="w-full bg-gray-950 text-gray-100 border border-gray-700 rounded p-3 text-sm font-mono"
+      rows="20" oninput="updateCharCount()"></textarea>
+    <div id="mem-msg" class="text-xs mt-1 h-4"></div>
+  </div>
+</div>
+
+<!-- Conversation Tab -->
+<div id="tab-conversation" class="tab-content">
+  <div class="flex gap-3 mb-4 items-center flex-wrap">
+    <select id="conv-speaker" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200" onchange="loadConversation()">
+      <option value="">All</option>
+    </select>
+    <input id="conv-limit" type="number" value="50" min="1" max="500"
+      class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-20 text-gray-200">
+    <button onclick="loadConversation()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm">Refresh</button>
+    <button onclick="clearConversation()" class="bg-red-900 hover:bg-red-800 text-red-200 px-3 py-1 rounded text-sm">Clear</button>
+  </div>
+  <div class="bg-gray-900 rounded-lg border border-gray-800 overflow-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-800 text-gray-400 text-xs">
+        <tr>
+          <th class="px-3 py-2 text-left">Time</th>
+          <th class="px-3 py-2 text-left">Speaker</th>
+          <th class="px-3 py-2 text-left">Role</th>
+          <th class="px-3 py-2 text-left w-full">Message</th>
+        </tr>
+      </thead>
+      <tbody id="conv-table" class="divide-y divide-gray-800"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Schedules Tab -->
+<div id="tab-schedules" class="tab-content">
+  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-4">
+    <div class="text-gray-400 text-xs mb-3">ADD SCHEDULE</div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <input id="sch-title" type="text" placeholder="Title" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
+      <input id="sch-dt" type="datetime-local" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
+      <input id="sch-desc" type="text" placeholder="Description (optional)" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
+      <input id="sch-remind" type="number" value="0" min="0" placeholder="Remind before (min)" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
+    </div>
+    <div class="flex gap-2 mt-3">
+      <button onclick="addSchedule()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">Add</button>
+      <span id="sch-msg" class="text-xs text-gray-400 self-center"></span>
+    </div>
+  </div>
+  <div id="sch-list" class="space-y-2"></div>
+</div>
+
+<!-- Chat Tab -->
+<div id="tab-chat" class="tab-content flex flex-col" style="height: calc(100vh - 200px);">
+  <div id="chat-messages" class="flex-1 overflow-auto bg-gray-900 rounded-lg border border-gray-800 p-4 space-y-3 mb-3"></div>
+  <div class="flex gap-2">
+    <input id="chat-input" type="text" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter')sendChat()"
+      class="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-sm text-gray-200">
+    <button onclick="sendChat()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded text-sm">Send</button>
+  </div>
+</div>
+
+<!-- Settings Tab -->
+<div id="tab-settings" class="tab-content">
+  <!-- Config -->
+  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-4">
+    <div class="text-gray-400 text-xs mb-3">CONFIGURATION</div>
+    <div id="config-sections" class="space-y-4"></div>
+  </div>
+  <!-- Integrations -->
+  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+    <div class="text-gray-400 text-xs mb-3">INTEGRATIONS</div>
+    <div id="integrations-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+  </div>
+</div>
+
+<!-- Logs Tab -->
+<div id="tab-logs" class="tab-content">
+  <div class="flex gap-3 mb-3 items-center flex-wrap text-sm">
+    <select id="log-filter" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-200" onchange="filterLogs()">
+      <option value="ALL">ALL</option>
+      <option value="INFO">INFO</option>
+      <option value="WARNING">WARNING</option>
+      <option value="ERROR">ERROR</option>
+    </select>
+    <button onclick="toggleLogPause()" id="log-pause-btn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">Pause</button>
+    <button onclick="clearLogs()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">Clear</button>
+    <span class="text-gray-500 text-xs" id="log-count">0 lines</span>
+  </div>
+  <pre id="log-box" class="bg-gray-900 rounded-lg border border-gray-800 p-4 text-xs overflow-auto"
+    style="height: calc(100vh - 260px); font-family: monospace;"></pre>
+</div>
+
+</main>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+const state = {
+  currentMemFile: 'Soul.md',
+  logPaused: false,
+  logLines: [],
+  wsConnected: false,
+};
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+function authHeaders() {
+  const t = localStorage.getItem('ccoli_token');
+  return t ? { 'X-Auth-Token': t } : {};
+}
+
+// ── API helpers ──────────────────────────────────────────────────────────────
+const API = {
+  get: (path) => fetch(path, { headers: authHeaders() }).then(r => r.json()),
+  post: (path, body) => fetch(path, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(r => r.json()),
+  put: (path, body) => fetch(path, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(r => r.json()),
+  patch: (path, body) => fetch(path, {
+    method: 'PATCH',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(r => r.json()),
+  del: (path) => fetch(path, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }).then(r => r.json()),
+};
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const btns = document.querySelectorAll('.tab-btn');
+  const labels = ['overview','memory','conversation','schedules','chat','settings','logs'];
+  btns[labels.indexOf(name)]?.classList.add('active');
+
+  // Load data for each tab
+  if (name === 'overview') loadOverview();
+  if (name === 'memory') loadMem(state.currentMemFile);
+  if (name === 'conversation') { loadSpeakers(); loadConversation(); }
+  if (name === 'schedules') loadSchedules();
+  if (name === 'settings') { loadConfig(); loadIntegrations(); }
+  if (name === 'logs') loadLogs();
+}
+
+// ── Emotion helpers ──────────────────────────────────────────────────────────
+function setEmotion(emotion) {
+  const pill = document.getElementById('emotion-pill');
+  pill.className = `emotion-${emotion} px-2 py-0.5 rounded text-xs font-bold`;
+  pill.textContent = emotion;
+  const ov = document.getElementById('ov-emotion');
+  if (ov) { ov.className = `text-2xl font-bold emotion-${emotion} rounded px-2`; ov.textContent = emotion; }
+}
+
+// ── WebSocket ────────────────────────────────────────────────────────────────
+let ws;
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  ws.onopen = () => {
+    state.wsConnected = true;
+    document.getElementById('ws-dot').className = 'ws-dot connected';
+    document.getElementById('ws-label').textContent = 'connected';
+  };
+
+  ws.onclose = () => {
+    state.wsConnected = false;
+    document.getElementById('ws-dot').className = 'ws-dot disconnected';
+    document.getElementById('ws-label').textContent = 'disconnected';
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    if (ev.event === 'emotion_change') setEmotion(ev.emotion);
+    if (ev.event === 'status_update') {
+      setEmotion(ev.emotion);
+      document.getElementById('mode-badge').textContent = ev.mode.toUpperCase();
+      const cc = document.getElementById('ov-conv-count');
+      if (cc) cc.textContent = ev.conversation_count;
+    }
+    if (ev.event === 'log') appendLog(ev.line);
+    if (ev.event === 'chat_response') appendChatBubble('assistant', ev.response, ev.emotion);
+  };
+
+  // Keep-alive ping
+  setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 20000);
+}
+
+// ── Overview ─────────────────────────────────────────────────────────────────
+async function loadOverview() {
+  const data = await API.get('/api/status');
+  document.getElementById('ov-mode').textContent = data.mode?.toUpperCase() || '—';
+  document.getElementById('ov-conv-count').textContent = data.conversation_count ?? '—';
+  setEmotion(data.emotion || 'neutral');
+  document.getElementById('mode-badge').textContent = (data.mode || 'agent').toUpperCase();
+
+  const pro = data.proactive || {};
+  document.getElementById('ov-proactive').innerHTML = `
+    <div>Enabled: <span class="${pro.enabled ? 'text-green-400' : 'text-red-400'}">${pro.enabled ? 'yes' : 'no'}</span></div>
+    <div>Count: <span class="text-white">${pro.count ?? 0}</span></div>
+    <div>Sleep: <span class="${pro.sleep_mode ? 'text-yellow-400' : 'text-gray-500'}">${pro.sleep_mode ? 'sleeping' : 'active'}</span></div>
+  `;
+
+  const timers = data.active_timers || [];
+  const alarms = data.active_alarms || [];
+  const t = document.getElementById('ov-timers');
+  if (!timers.length && !alarms.length) {
+    t.textContent = 'No active timers or alarms';
+  } else {
+    t.innerHTML = [
+      ...timers.map(x => `<div>⏱ Timer: ${x.label || x.id}</div>`),
+      ...alarms.map(x => `<div>⏰ Alarm: ${x.label || x.id}</div>`),
+    ].join('');
+  }
+
+  // Recent activity (last conversation messages)
+  const conv = await API.get('/api/conversation/?limit=5');
+  const activity = document.getElementById('ov-activity');
+  const msgs = conv.history || [];
+  if (!msgs.length) {
+    activity.innerHTML = '<div class="text-gray-500">No recent activity</div>';
+  } else {
+    activity.innerHTML = msgs.map(m => `
+      <div class="flex gap-3 text-xs border-b border-gray-800 pb-2">
+        <span class="${m.role === 'user' ? 'text-blue-400' : 'text-green-400'} w-20 shrink-0">${m.role}</span>
+        <span class="text-gray-300 truncate">${escHtml(String(m.content || '').substring(0, 120))}</span>
+      </div>
+    `).join('');
+  }
+}
+
+// ── Memory ───────────────────────────────────────────────────────────────────
+async function loadMem(filename) {
+  state.currentMemFile = filename;
+  document.getElementById('mem-filename').textContent = filename;
+  document.querySelectorAll('.mem-tab-btn').forEach(b => {
+    b.className = 'mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm';
+  });
+  const labels = ['Soul.md','User.md','Shortterm_Memory.md','Longterm_Memory.md','Relation.md'];
+  const idx = labels.indexOf(filename);
+  if (idx >= 0) document.querySelectorAll('.mem-tab-btn')[idx].className = 'mem-tab-btn bg-blue-700 text-white px-3 py-1 rounded text-sm';
+
+  const data = await API.get('/api/memory/' + filename);
+  document.getElementById('mem-editor').value = data.content || '';
+  updateCharCount();
+  document.getElementById('mem-msg').textContent = '';
+}
+
+function switchMemTab(f) { loadMem(f); }
+function updateCharCount() {
+  const v = document.getElementById('mem-editor').value;
+  document.getElementById('mem-charcount').textContent = `${v.length} chars`;
+}
+
+async function saveMem() {
+  const content = document.getElementById('mem-editor').value;
+  const result = await API.put('/api/memory/' + state.currentMemFile, { content });
+  const msg = document.getElementById('mem-msg');
+  if (result.ok) { msg.className = 'text-xs mt-1 h-4 text-green-400'; msg.textContent = 'Saved.'; }
+  else { msg.className = 'text-xs mt-1 h-4 text-red-400'; msg.textContent = 'Save failed.'; }
+  setTimeout(() => { msg.textContent = ''; }, 2000);
+}
+
+// ── Conversation ─────────────────────────────────────────────────────────────
+async function loadSpeakers() {
+  const data = await API.get('/api/conversation/speakers');
+  const sel = document.getElementById('conv-speaker');
+  sel.innerHTML = '<option value="">All</option>' +
+    (data.speakers || []).map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+async function loadConversation() {
+  const limit = document.getElementById('conv-limit').value || 50;
+  const speaker = document.getElementById('conv-speaker').value;
+  const qs = `?limit=${limit}${speaker ? '&speaker_id=' + encodeURIComponent(speaker) : ''}`;
+  const data = await API.get('/api/conversation/' + qs);
+  const tbody = document.getElementById('conv-table');
+  const msgs = data.history || [];
+  if (!msgs.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="px-3 py-4 text-center text-gray-500">No messages</td></tr>';
+    return;
+  }
+  tbody.innerHTML = msgs.map(m => `
+    <tr class="hover:bg-gray-800">
+      <td class="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">${m.timestamp || ''}</td>
+      <td class="px-3 py-2 text-gray-400 text-xs">${m.speaker_id || '—'}</td>
+      <td class="px-3 py-2"><span class="${m.role==='user'?'text-blue-400':'text-green-400'} text-xs">${m.role}</span></td>
+      <td class="px-3 py-2 text-gray-200 text-xs">${escHtml(String(m.content||''))}</td>
+    </tr>
+  `).join('');
+}
+
+async function clearConversation() {
+  if (!confirm('Clear all conversation history?')) return;
+  await API.del('/api/conversation/');
+  loadConversation();
+}
+
+// ── Schedules ────────────────────────────────────────────────────────────────
+async function loadSchedules() {
+  const data = await API.get('/api/schedules/');
+  const list = document.getElementById('sch-list');
+  const schedules = (data.schedules || []).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+  if (!schedules.length) {
+    list.innerHTML = '<div class="text-gray-500 text-sm">No schedules</div>';
+    return;
+  }
+  const now = new Date();
+  list.innerHTML = schedules.map(s => {
+    const dt = new Date(s.datetime);
+    const past = dt < now;
+    const color = s.completed ? 'border-gray-700 opacity-50' : past ? 'border-gray-700' : 'border-blue-800';
+    const dtStr = dt.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="bg-gray-900 rounded border ${color} p-3 flex items-start justify-between gap-3">
+        <div class="flex-1">
+          <div class="font-bold text-sm ${s.completed ? 'line-through text-gray-500' : 'text-white'}">${escHtml(s.title)}</div>
+          <div class="text-xs text-gray-400 mt-1">${dtStr}${s.reminder_before ? ` · remind ${s.reminder_before}min before` : ''}</div>
+          ${s.description ? `<div class="text-xs text-gray-500 mt-1">${escHtml(s.description)}</div>` : ''}
+        </div>
+        <div class="flex gap-2 shrink-0">
+          ${!s.completed ? `<button onclick="completeSchedule(${s.id})" class="text-xs bg-green-900 hover:bg-green-800 text-green-200 px-2 py-1 rounded">Done</button>` : ''}
+          <button onclick="deleteSchedule(${s.id})" class="text-xs bg-red-900 hover:bg-red-800 text-red-200 px-2 py-1 rounded">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function addSchedule() {
+  const title = document.getElementById('sch-title').value.trim();
+  const dt = document.getElementById('sch-dt').value;
+  const desc = document.getElementById('sch-desc').value.trim();
+  const remind = parseInt(document.getElementById('sch-remind').value) || 0;
+  const msg = document.getElementById('sch-msg');
+  if (!title || !dt) { msg.textContent = 'Title and datetime required'; return; }
+  const result = await API.post('/api/schedules/', { title, datetime: dt, description: desc, reminder_before: remind });
+  msg.textContent = result.message || (result.ok ? 'Added!' : 'Failed');
+  if (result.ok) {
+    document.getElementById('sch-title').value = '';
+    document.getElementById('sch-desc').value = '';
+    loadSchedules();
+  }
+  setTimeout(() => { msg.textContent = ''; }, 3000);
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Delete this schedule?')) return;
+  await API.del('/api/schedules/' + id);
+  loadSchedules();
+}
+
+async function completeSchedule(id) {
+  await API.post('/api/schedules/' + id + '/complete', {});
+  loadSchedules();
+}
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
+function appendChatBubble(role, text, emotion) {
+  const box = document.getElementById('chat-messages');
+  const isUser = role === 'user';
+  const div = document.createElement('div');
+  div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+  div.innerHTML = `
+    <div class="max-w-lg">
+      <div class="${isUser ? 'bg-blue-700 text-white' : 'bg-gray-800 text-gray-100'} rounded-lg px-4 py-2 text-sm">
+        ${escHtml(text)}
+      </div>
+      ${emotion && !isUser ? `<div class="mt-1 text-xs"><span class="emotion-${emotion} px-1 rounded">${emotion}</span></div>` : ''}
+    </div>
+  `;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  appendChatBubble('user', text);
+  try {
+    const result = await API.post('/api/chat/', { text, speaker_id: 'web_user' });
+    appendChatBubble('assistant', result.response || '(no response)', result.emotion);
+  } catch (e) {
+    appendChatBubble('assistant', '(error: ' + e.message + ')');
+  }
+}
+
+// ── Settings: Config ─────────────────────────────────────────────────────────
+const SKIP_SECTIONS = ['web'];  // hide internal sections
+
+async function loadConfig() {
+  const cfg = await API.get('/api/config/');
+  const container = document.getElementById('config-sections');
+  container.innerHTML = '';
+  for (const [section, values] of Object.entries(cfg)) {
+    if (SKIP_SECTIONS.includes(section) || typeof values !== 'object') continue;
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <div class="text-blue-400 text-xs mb-2 font-bold uppercase">${section}</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2" id="cfg-${section}"></div>
+      <button onclick="saveConfigSection('${section}')"
+        class="mt-2 bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs">Save ${section}</button>
+      <span id="cfg-msg-${section}" class="text-xs ml-2 text-green-400 hidden">Saved!</span>
+    `;
+    const grid = div.querySelector(`#cfg-${section}`);
+    for (const [key, val] of Object.entries(values)) {
+      const inp = document.createElement('div');
+      inp.innerHTML = `
+        <label class="text-xs text-gray-400">${key}</label>
+        <input data-section="${section}" data-key="${key}"
+          class="cfg-input w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200 mt-0.5"
+          value="${escHtml(String(val))}">
+      `;
+      grid.appendChild(inp);
+    }
+    container.appendChild(div);
+  }
+}
+
+async function saveConfigSection(section) {
+  const inputs = document.querySelectorAll(`[data-section="${section}"]`);
+  for (const inp of inputs) {
+    const key = inp.dataset.key;
+    let val = inp.value;
+    // Try to cast to number/bool
+    if (val === 'true') val = true;
+    else if (val === 'false') val = false;
+    else if (!isNaN(val) && val !== '') val = Number(val);
+    await API.patch('/api/config/', { section, key, value: val });
+  }
+  const msg = document.getElementById(`cfg-msg-${section}`);
+  msg.classList.remove('hidden');
+  setTimeout(() => msg.classList.add('hidden'), 2000);
+}
+
+// ── Settings: Integrations ───────────────────────────────────────────────────
+async function loadIntegrations() {
+  const data = await API.get('/api/integrations/');
+  const list = document.getElementById('integrations-list');
+  list.innerHTML = '';
+  for (const [name, info] of Object.entries(data.integrations || {})) {
+    const card = document.createElement('div');
+    card.className = 'bg-gray-800 rounded p-3 border border-gray-700';
+    card.innerHTML = `
+      <div class="flex justify-between items-center mb-2">
+        <span class="font-bold text-sm">${name}</span>
+        <div class="flex gap-2 items-center">
+          <span class="text-xs ${info.configured ? 'text-green-400' : 'text-red-400'}">
+            ${info.configured ? '● configured' : '○ not configured'}
+          </span>
+          <label class="flex items-center gap-1 text-xs">
+            <input type="checkbox" ${info.enabled ? 'checked' : ''}
+              onchange="toggleIntegration('${name}', this.checked)">
+            enabled
+          </label>
+        </div>
+      </div>
+      <button onclick="healthCheck('${name}', this)"
+        class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">Health Check</button>
+      <span id="health-${name}" class="text-xs ml-2 text-gray-400"></span>
+    `;
+    list.appendChild(card);
+  }
+}
+
+async function toggleIntegration(name, enabled) {
+  await API.post(`/api/integrations/${name}/enabled`, { enabled });
+}
+
+async function healthCheck(name, btn) {
+  const span = document.getElementById(`health-${name}`);
+  span.textContent = 'checking...';
+  try {
+    const result = await API.get(`/api/integrations/${name}/health`);
+    span.textContent = result.ok ? '✓ ok' : `✗ ${result.error?.user_message || 'failed'}`;
+    span.className = `text-xs ml-2 ${result.ok ? 'text-green-400' : 'text-red-400'}`;
+  } catch (e) {
+    span.textContent = '✗ error';
+    span.className = 'text-xs ml-2 text-red-400';
+  }
+}
+
+// ── Logs ─────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const data = await API.get('/api/logs/?tail=200');
+  state.logLines = data.lines || [];
+  renderLogs();
+}
+
+function appendLog(line) {
+  if (state.logPaused) return;
+  state.logLines.push(line);
+  if (state.logLines.length > 500) state.logLines.shift();
+  renderLogs();
+}
+
+function renderLogs() {
+  const filter = document.getElementById('log-filter').value;
+  const box = document.getElementById('log-box');
+  const lines = filter === 'ALL'
+    ? state.logLines
+    : state.logLines.filter(l => l.includes(`| ${filter}`));
+  box.innerHTML = lines.map(l => {
+    let cls = '';
+    if (l.includes('| ERROR')) cls = 'log-ERROR';
+    else if (l.includes('| WARNING')) cls = 'log-WARNING';
+    else if (l.includes('| INFO')) cls = 'log-INFO';
+    else cls = 'log-DEBUG';
+    return `<span class="${cls}">${escHtml(l)}</span>`;
+  }).join('\n');
+  if (!state.logPaused) box.scrollTop = box.scrollHeight;
+  document.getElementById('log-count').textContent = `${lines.length} lines`;
+}
+
+function filterLogs() { renderLogs(); }
+
+function toggleLogPause() {
+  state.logPaused = !state.logPaused;
+  document.getElementById('log-pause-btn').textContent = state.logPaused ? 'Resume' : 'Pause';
+}
+
+function clearLogs() {
+  state.logLines = [];
+  renderLogs();
+}
+
+// ── Utils ────────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+connectWS();
+loadOverview();
+setInterval(loadOverview, 30000);  // auto-refresh overview every 30s
+</script>
+</body>
+</html>

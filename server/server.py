@@ -845,6 +845,23 @@ def main():
 
     runtime_state = {"connection_greeting_sent": False}
 
+    # Web dashboard
+    web_cfg = config.config.get("web", {})
+    if web_cfg.get("enabled", True):
+        from web import start_web_server
+        from web.auth import configure as configure_auth
+        from web.log_handler import install as install_log_handler
+        install_log_handler(max_lines=int(web_cfg.get("log_tail_lines", 200)))
+        configure_auth(web_cfg.get("auth_token", "") or "")
+        start_web_server(
+            agent_fn=lambda: agent_handler,
+            robot_fn=lambda: robot_handler,
+            mode_fn=lambda: current_mode,
+            host=web_cfg.get("host", "0.0.0.0"),
+            port=int(web_cfg.get("port", 8005)),
+        )
+        log.info("Web dashboard: http://localhost:%s", web_cfg.get("port", 8005))
+
     conn_manager = build_connection_manager(
         config,
         handler=lambda conn, addr: handle_connection(

@@ -81,3 +81,10 @@ setup:
   provider: gemini
   python_extras:
   - runtime
+
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8005
+  auth_token: ""        # blank = no authentication required
+  log_tail_lines: 200

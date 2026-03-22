@@ -94,6 +94,13 @@ class Config:
         "voice_id": {
             "enabled": False,
             "threshold": 0.72
+        },
+        "web": {
+            "enabled": True,
+            "host": "0.0.0.0",
+            "port": 8005,
+            "auth_token": "",
+            "log_tail_lines": 200
         }
     }
     
