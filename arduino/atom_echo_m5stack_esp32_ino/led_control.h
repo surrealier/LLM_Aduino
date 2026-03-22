@@ -20,9 +20,16 @@ void led_init();
 // RGB 색상 설정 (0-255 각 채널)
 void led_set_color(uint8_t r, uint8_t g, uint8_t b);
 
+// 연결 상태별 LED 표시
+void led_show_connecting();
+void led_show_connected();
+
 // 감정 문자열에 따른 LED 색상 설정
 // 지원: "happy", "sad", "excited", "sleepy", "angry", 기타(neutral)
 void led_show_emotion(const char* emotion);
+
+// 마지막으로 적용된 RGB 색상 조회 (테스트/디버깅용)
+void led_get_last_color(uint8_t* r, uint8_t* g, uint8_t* b);
 
 // 애니메이션 패턴 업데이트 (매 loop()에서 호출, 현재 placeholder)
 void led_update_pattern();

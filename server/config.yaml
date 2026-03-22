@@ -1,35 +1,27 @@
-# ccoli server configuration
-
 server:
-  host: "0.0.0.0"
+  host: 0.0.0.0
   port: 5001
-
 stt:
-  model_size: "medium"      # tiny, base, small, medium, large
-  device: "cuda"            # cuda or cpu
-  language: "ko"
-
+  model_size: medium
+  device: cpu
+  language: ko
 llm:
-  provider: "ollama"          # ollama, gemini, claude, chatgpt
-  base_url: "http://localhost:11434"
-  model: "qwen3.5:9b"
+  provider: gemini
+  base_url: ''
+  model: gemini-2.5-flash
   think: false
   auto_start: true
-  start_command: "ollama serve"
+  start_command: ollama serve
   startup_timeout: 10.0
-
 tts:
-  voice: "ko-KR-SunHiNeural"
-
+  voice: ko-KR-SunHiNeural
 assistant:
-  name: "ccoli"
-  personality: "witty"
+  name: ccoli
+  personality: witty
   proactive: true
   proactive_interval: 600
-
 features:
   robot_mode_enabled: false
-
 robot:
   servo:
     pin_pitch: 26
@@ -38,53 +30,54 @@ robot:
     angle_max: 180
     default_angle: 90
   display:
-    type: "ssd1306"
+    type: ssd1306
     width: 128
     height: 64
     i2c_scl: 21
     i2c_sda: 25
-    i2c_addr: "0x3C"
+    i2c_addr: '0x3C'
   idle:
     blink_interval_min: 3000
     blink_interval_max: 5000
     gaze_interval: 8000
   emotion:
-    default: "neutral"
+    default: neutral
     decay_to_neutral: true
     decay_interval: 30
-
 memory:
   refresh_interval: 5
-  memory_dir: "memory"
-
+  memory_dir: memory
 weather:
-  api_key: ""
+  api_key: ''
   lat: 37.5665
-  lon: 126.9780
-
+  lon: 126.978
 context:
   max_history: 20
   backup_interval: 10
   auto_save: true
-
 emotion:
   enabled: true
   decay_to_neutral: true
   decay_interval: 300
-
 logging:
-  level: "INFO"
+  level: INFO
   save_to_file: true
-  log_dir: "logs"
-
+  log_dir: logs
 connection:
-  mode: "wifi"
+  mode: auto
   socket_timeout: 0.5
-
+  serial_port: auto
+  serial_baudrate: 115200
+  serial_scan_interval: 1.0
+  serial_initial_idle_timeout_s: 5.0
 queue:
   stt_maxsize: 4
   tts_maxsize: 2
   command_maxsize: 10
-
 audio:
   max_seconds: 12
+setup:
+  install_target: api
+  provider: gemini
+  python_extras:
+  - runtime

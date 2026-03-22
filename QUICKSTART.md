@@ -3,11 +3,67 @@
 ## 1. Install
 
 ```bash
-pip install -r server/requirements.txt
-pip install -e .
+curl -fsSL https://raw.githubusercontent.com/surrealier/LLM_Aduino/main/scripts/install.sh | bash
 ```
 
-## 2. Configure project (official command)
+The bootstrap script installs the lightweight CLI first, then opens `ccoli setup` so you can choose:
+- `Ollama Local`
+- `Cloud API` (`gemini`, `claude`, `chatgpt`)
+- `Configure Later`
+
+On macOS, the setup flow defaults STT to `cpu` and skips unused heavy packages like `torch` / `transformers`.
+
+If you want to run onboarding again later:
+
+```bash
+ccoli setup
+```
+
+Local repo / development path:
+
+```bash
+./scripts/install.sh
+# or
+python3 scripts/install.py
+```
+
+## 2. Flash firmware (default: wired USB mode)
+
+Open and upload:
+- `arduino/atom_echo_m5stack_esp32_ino/atom_echo_m5stack_esp32_ino.ino`
+
+No extra config is required for wired mode:
+- If `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` is missing, the firmware defaults to `CONNECTION_MODE = "wired"`
+- The server auto-detects the Atom Echo over USB serial
+- The default wired serial speed is `115200` for broad CP210x stability
+- Wired USB audio uses `8kHz G.711 mu-law` in both directions so STT capture and TTS playback fit inside the wired bandwidth budget
+- Arduino IDE upload speed can remain `115200`; it does not need to match the runtime protocol settings
+- The server temporarily locks the mic while the first greeting is sent, then the firmware reopens it after playback
+
+Optional robot/display mode only:
+- Install Arduino libraries `Adafruit SSD1306` and `Adafruit GFX Library`
+- Wire the SSD1306 OLED to `G25` (SDA) and `G21` (SCL)
+
+## 3. Start server
+
+```bash
+ccoli start
+```
+
+Then connect the Atom Echo to your PC with USB-C.
+- The server preloads STT and TTS during startup so the first turn avoids the cold-start model penalty.
+- LED status: red before the server link is ready, light green once the server connection is healthy.
+- On the first healthy connection, ccoli plays a short contextual welcome greeting.
+
+Optional temporary port override:
+
+```bash
+ccoli start --port 5002
+```
+
+## 4. Optional Wi-Fi mode
+
+Use this only if you want the ESP32 to connect over Wi-Fi instead of USB:
 
 ```bash
 ccoli config wifi <WiFi Name> password <password> port <port> [mode wifi|wired]
@@ -27,26 +83,6 @@ colli config wifi MyHomeWiFi password MySecretPass port 5001
 
 After running, check `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` and set:
 - `SERVER_IP` to your PC/server LAN IP
-
-## 3. Start server
-
-```bash
-ccoli start
-```
-
-Optional temporary port override:
-
-```bash
-ccoli start --port 5002
-```
-
-## 4. Upload firmware
-
-Open and upload:
-- `arduino/atom_echo_m5stack_esp32_ino/atom_echo_m5stack_esp32_ino.ino`
-
-Required file before build:
-- `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h`
 
 ## 5. Current mode support
 

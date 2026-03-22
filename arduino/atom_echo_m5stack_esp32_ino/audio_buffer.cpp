@@ -35,24 +35,24 @@ void preroll_push(PrerollBuffer* pr, const int16_t* x, size_t n) {
 // 순환 버퍼이므로 full일 때는 두 번에 나눠 전송:
 //   1) pos ~ PREROLL_SAMPLES-1 (오래된 부분)
 //   2) 0 ~ pos-1 (최신 부분)
-void preroll_send(PrerollBuffer* pr, Client& client) {
+void preroll_send(PrerollBuffer* pr, Stream& transport) {
   size_t count = pr->full ? PREROLL_SAMPLES : pr->pos;
   if (count == 0) return;
 
   // 아직 한 바퀴 안 돌았으면 0~pos만 전송
   if (!pr->full) {
-    protocol_send_packet(client, PTYPE_AUDIO, (uint8_t*)pr->buf, (uint16_t)(count * sizeof(int16_t)));
+    protocol_send_packet(transport, PTYPE_AUDIO, (uint8_t*)pr->buf, (uint16_t)(count * sizeof(int16_t)));
     return;
   }
 
   // 순환 버퍼: 오래된 부분(pos~끝) 먼저 전송
   size_t tail = PREROLL_SAMPLES - pr->pos;
-  if (!protocol_send_packet(client, PTYPE_AUDIO, (uint8_t*)(pr->buf + pr->pos),
+  if (!protocol_send_packet(transport, PTYPE_AUDIO, (uint8_t*)(pr->buf + pr->pos),
                             (uint16_t)(tail * sizeof(int16_t)))) {
     return;
   }
   // 최신 부분(0~pos) 전송
   if (pr->pos > 0) {
-    protocol_send_packet(client, PTYPE_AUDIO, (uint8_t*)pr->buf, (uint16_t)(pr->pos * sizeof(int16_t)));
+    protocol_send_packet(transport, PTYPE_AUDIO, (uint8_t*)pr->buf, (uint16_t)(pr->pos * sizeof(int16_t)));
   }
 }

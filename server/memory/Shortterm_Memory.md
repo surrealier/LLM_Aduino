@@ -1,13 +1,4 @@
-# Short-term Memory Template
+# Shortterm Memory — 단기 기억
 
-## Latest Summary
-- no active conversation context
-
-## Current Topic
-- none
-
-## User Mood
-- unknown
-
-## Notes
-- This file is reset-safe and contains no personal data.
+## 최근 대화 요약
+사용자는 잠자리에

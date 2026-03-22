@@ -12,6 +12,7 @@
 #ifndef CONNECTION_H
 #define CONNECTION_H
 
+#include <Arduino.h>
 #include <WiFi.h>
 
 // 연결 상태 구조체
@@ -19,6 +20,7 @@ struct ConnectionState {
   unsigned long last_connect_attempt;  // 마지막 연결 시도 시각 (millis)
   bool wifi_connected;                 // WiFi AP 연결 여부
   bool server_connected;               // TCP 서버 연결 여부
+  bool wired_mode;                     // USB serial wired 모드 여부
 };
 
 // 초기화: WiFi STA 모드 설정 및 첫 연결 시도
@@ -29,5 +31,10 @@ void connection_manage(ConnectionState* state, WiFiClient& client);
 
 // 서버 연결 상태 조회
 bool connection_is_server_connected(const ConnectionState* state);
+bool connection_transport_ready(const ConnectionState* state);
+bool connection_is_wired_mode();
+bool connection_debug_logging_enabled();
+uint32_t connection_ping_interval_ms();
+Stream& connection_stream(WiFiClient& client);
 
 #endif

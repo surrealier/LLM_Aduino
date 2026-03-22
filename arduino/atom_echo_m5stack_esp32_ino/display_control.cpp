@@ -1,8 +1,23 @@
 #include "display_control.h"
 #include "config.h"
 #include <Wire.h>
+#include <string.h>
+
+#if defined(__has_include)
+  #if __has_include(<Adafruit_SSD1306.h>)
+    #include <Adafruit_SSD1306.h>
+    #define CCOLI_HAS_SSD1306 1
+  #else
+    #define CCOLI_HAS_SSD1306 0
+  #endif
+#else
+  #define CCOLI_HAS_SSD1306 0
+#endif
+
+#if CCOLI_HAS_SSD1306
 
 Adafruit_SSD1306 display(DISPLAY_WIDTH, DISPLAY_HEIGHT, &Wire, -1);
+static bool display_ready = false;
 
 static FaceType current_face = FACE_NEUTRAL;
 static char status_text[32] = "";
@@ -24,7 +39,10 @@ static const unsigned long DRAW_INTERVAL_MS = 66;
 
 void display_init() {
   Wire.begin(DISPLAY_SDA_PIN, DISPLAY_SCL_PIN);
-  display.begin(SSD1306_SWITCHCAPVCC, DISPLAY_I2C_ADDR);
+  display_ready = display.begin(SSD1306_SWITCHCAPVCC, DISPLAY_I2C_ADDR);
+  if (!display_ready) {
+    return;
+  }
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.display();
@@ -163,6 +181,8 @@ void display_set_status_text(const char* text) {
 }
 
 void display_update() {
+  if (!display_ready) return;
+
   unsigned long now = millis();
 
   // Throttle redraws
@@ -208,6 +228,33 @@ void display_update() {
 }
 
 void display_clear() {
+  if (!display_ready) return;
+
   display.clearDisplay();
   display.display();
 }
+
+#else
+
+static FaceType current_face = FACE_NEUTRAL;
+static char status_text[32] = "";
+
+void display_init() {}
+
+void display_show_face(FaceType face) {
+  current_face = face;
+  status_text[0] = '\0';
+}
+
+void display_set_status_text(const char* text) {
+  strncpy(status_text, text ? text : "", sizeof(status_text) - 1);
+  status_text[sizeof(status_text) - 1] = '\0';
+}
+
+void display_update() {}
+
+void display_clear() {
+  status_text[0] = '\0';
+}
+
+#endif

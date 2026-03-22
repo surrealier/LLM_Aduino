@@ -12,3 +12,5 @@
 ## Notes
 - This file is intentionally generic for open-source distribution.
 - Runtime deployments should store private user data outside git.
+- 음악 감상 선호: 힙합
+- [SHORTTERM]

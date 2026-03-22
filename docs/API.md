@@ -5,12 +5,14 @@ This document describes the current runtime entrypoints and key server modules.
 ## Runtime Entry
 
 - `server/server.py`
-  - Main TCP server process
+  - Main device server process
+  - Auto-detects wired USB serial or accepts Wi-Fi/TCP connections
   - Handles ESP32 packet I/O, STT pipeline, Agent mode orchestration
 
 ## CLI Entry
 
 - `ccoli/cli.py`
+  - `ccoli setup` / `ccoli install`
   - `ccoli start`
   - `ccoli config wifi <WiFi Name> password <password> port <port>`
 
@@ -21,7 +23,7 @@ This document describes the current runtime entrypoints and key server modules.
   - Packet encode/decode helpers
   - CMD/AUDIO_OUT send helpers
 - `server/src/connection_manager.py`
-  - TCP listen/accept loop
+  - USB serial auto-detect + TCP listen/accept loop
 - `server/src/stt_engine.py`
   - Whisper model load + transcription wrapper
 - `server/src/audio_processor.py`

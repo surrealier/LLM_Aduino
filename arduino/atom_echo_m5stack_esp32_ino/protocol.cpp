@@ -12,6 +12,7 @@
 // ============================================================
 
 #include "protocol.h"
+#include "connection.h"
 #include "config.h"
 #include "led_control.h"
 #include "servo_control.h"
@@ -50,14 +51,89 @@ static size_t rx_audio_buf_size = 0;
 // ── TTS 오디오 링 버퍼 ──
 // 서버에서 스트리밍되는 TTS PCM 데이터를 저장하고
 // 비블로킹으로 스피커에 공급하는 원형 버퍼
-static uint8_t* audio_ring_buffer = nullptr;  // 첫 AUDIO_OUT 수신 시 malloc
+static uint8_t audio_ring_buffer[AUDIO_PLAY_BUFFER_SIZE];
 static size_t audio_ring_head = 0;   // 쓰기 위치
 static size_t audio_ring_tail = 0;   // 읽기 위치
 static size_t audio_ring_size = AUDIO_PLAY_BUFFER_SIZE;
 static bool audio_playing = false;
+static bool capture_locked = false;
+static bool capture_lock_waiting_for_playback = false;
 
 // PING 타이밍
 static uint32_t last_ping_ms = 0;
+static uint32_t last_peer_rx_ms = 0;
+
+#define DEBUG_PRINTLN(msg) do { if (connection_debug_logging_enabled()) Serial.println(msg); } while (0)
+
+static inline bool wired_tts_mode() {
+  return connection_is_wired_mode();
+}
+
+static inline size_t audio_output_bytes_per_sample() {
+  return wired_tts_mode() ? 1 : sizeof(int16_t);
+}
+
+static inline uint32_t audio_output_sample_rate() {
+  return wired_tts_mode() ? WIRED_TTS_SAMPLE_RATE : AUDIO_SAMPLE_RATE;
+}
+
+static inline size_t audio_output_start_threshold_bytes() {
+  return wired_tts_mode() ? 2048 : 4096;
+}
+
+static bool stream_write_all(Stream& transport, const uint8_t* data, size_t len) {
+  const uint8_t* p = data;
+  size_t remaining = len;
+  while (remaining > 0) {
+    size_t written = transport.write(p, remaining);
+    if (written == 0) return false;
+    p += written;
+    remaining -= written;
+  }
+  return true;
+}
+
+static uint8_t linear16_to_mulaw(int16_t sample) {
+  static constexpr int32_t MULAW_BIAS = 0x84;
+  static constexpr int32_t MULAW_CLIP = 32635;
+
+  uint8_t sign = 0x00;
+  int32_t magnitude = sample;
+  if (magnitude < 0) {
+    sign = 0x80;
+    magnitude = -magnitude;
+  }
+  if (magnitude > MULAW_CLIP) {
+    magnitude = MULAW_CLIP;
+  }
+
+  int32_t biased = magnitude + MULAW_BIAS;
+  uint8_t exponent = 7;
+  int32_t mask = 0x4000;
+  while (exponent > 0 && (biased & mask) == 0) {
+    exponent--;
+    mask >>= 1;
+  }
+  uint8_t mantissa = (uint8_t)((biased >> (exponent + 3)) & 0x0F);
+  return (uint8_t)(~(sign | (uint8_t)(exponent << 4) | mantissa));
+}
+
+static int16_t mulaw_to_linear16(uint8_t value) {
+  static constexpr int16_t MULAW_BIAS = 0x84;
+
+  value = (uint8_t)~value;
+  uint8_t sign = value & 0x80;
+  uint8_t exponent = (value >> 4) & 0x07;
+  uint8_t mantissa = value & 0x0F;
+  int16_t sample = (int16_t)(((MULAW_BIAS + ((int16_t)mantissa << 3)) << exponent) - MULAW_BIAS);
+  return sign ? (int16_t)-sample : sample;
+}
+
+static uint16_t wired_audio_encoded_length(uint16_t pcm_len) {
+  uint16_t usable = (uint16_t)(pcm_len - (pcm_len % 2));
+  if (usable == 0) return 0;
+  return (uint16_t)((usable / 4) + ((usable % 4) ? 1 : 0));
+}
 
 // ════════════════════════════════════════════
 // 경량 JSON 파서
@@ -150,18 +226,21 @@ static size_t audio_ring_used() {
 // audio_ring_push — 데이터를 링 버퍼에 추가
 // 공간 부족 시 오래된 데이터를 버리고 새 데이터 수용 (오디오 끊김 최소화)
 static bool audio_ring_push(const uint8_t* data, size_t len) {
+  size_t sample_bytes = audio_output_bytes_per_sample();
   // PCM16 샘플 경계 유지: tail이 홀수 바이트면 1바이트 버려 정렬 복구
-  if (audio_ring_tail & 0x01) {
+  if (sample_bytes > 1 && (audio_ring_tail & 0x01)) {
     audio_ring_tail = (audio_ring_tail + 1) % audio_ring_size;
   }
 
   if (audio_ring_available() < len) {
     // 오버플로 방지: 오래된 데이터 드롭
     size_t to_drop = len - audio_ring_available() + 1024;
-    // 샘플 경계(2바이트) 보존
-    to_drop = (to_drop + 1) & ~((size_t)1);
     size_t used = audio_ring_used();
-    used &= ~((size_t)1);
+    // 샘플 경계 보존
+    if (sample_bytes > 1) {
+      to_drop = (to_drop + 1) & ~((size_t)1);
+      used &= ~((size_t)1);
+    }
     if (to_drop > used) to_drop = used;
     audio_ring_tail = (audio_ring_tail + to_drop) % audio_ring_size;
     if (audio_ring_available() < len) return false;
@@ -200,28 +279,20 @@ static size_t audio_ring_pop(uint8_t* data, size_t max_len) {
 // ════════════════════════════════════════════
 
 // handleAudioOut — AUDIO_OUT(0x12) 패킷 처리
-// 서버에서 스트리밍되는 TTS PCM 데이터를 링 버퍼에 저장.
+// 서버에서 스트리밍되는 TTS 오디오를 링 버퍼에 저장.
 // 1KB 이상 축적되면 재생 시작 (짧은 응답 지연 최소화)
 static void handleAudioOut(const uint8_t* payload, uint16_t len) {
-  // 16-bit PCM alignment (1 sample = 2 bytes)
-  if (len & 0x01) len -= 1;
-  if (len < 2) return;  // 최소 1샘플(2B) 필요
-
-  // 링 버퍼 최초 할당 (lazy initialization, 메모리 절약)
-  if (audio_ring_buffer == nullptr) {
-    audio_ring_buffer = (uint8_t*)malloc(audio_ring_size);
-    if (!audio_ring_buffer) {
-      if (!g_serial_mode) Serial.println("[AUDIO_OUT] Ring buffer alloc failed!");
-      return;
-    }
-    audio_ring_head = 0;
-    audio_ring_tail = 0;
+  if (!wired_tts_mode()) {
+    // 16-bit PCM alignment (1 sample = 2 bytes)
+    if (len & 0x01) len -= 1;
+    if (len < 2) return;  // 최소 1샘플(2B) 필요
+  } else if (len == 0) {
+    return;
   }
 
   if (!audio_ring_push(payload, len)) return;
 
-  // 충분한 데이터가 모이면 재생 시작 (1KB = ~32ms @16kHz)
-  if (!audio_playing && audio_ring_used() >= 4096) {
+  if (!audio_playing && audio_ring_used() >= audio_output_start_threshold_bytes()) {
     audio_playing = true;
     M5.Speaker.setVolume(180);
   }
@@ -281,6 +352,17 @@ static void handleCmdJson(const uint8_t* payload, uint16_t len) {
   json_get_string(json, "emotion", emotion, sizeof(emotion));
   json_get_string(json, "servo_action", servo_action, sizeof(servo_action));
 
+  if (has_action && strcmp(action, "MIC_LOCK") == 0) {
+    capture_locked = true;
+    capture_lock_waiting_for_playback = true;
+    return;
+  }
+  if (has_action && strcmp(action, "MIC_UNLOCK") == 0) {
+    capture_locked = false;
+    capture_lock_waiting_for_playback = false;
+    return;
+  }
+
   // ── ROBOT_EMOTION: display face + servo action + LED ──
   if (has_action && strcmp(action, "ROBOT_EMOTION") == 0) {
     char face[32] = {0};
@@ -338,32 +420,56 @@ void protocol_init() {
   rx_stage = RX_TYPE;
   rx_len = 0;
   rx_pos = 0;
+  last_ping_ms = 0;
+  last_peer_rx_ms = 0;
+  capture_locked = false;
+  capture_lock_waiting_for_playback = false;
 }
 
 // protocol_send_packet — 패킷 1개 송신
 // 헤더(3B)를 단일 write로 전송, 페이로드는 재시도 루프로 완전 전송 보장.
 // 전송 실패(write 반환 0) 시 연결 종료.
-// g_serial_mode: Serial 전송 모드일 때 true (main .ino에서 정의)
-extern bool g_serial_mode;
+bool protocol_send_packet(Stream& transport, uint8_t type, const uint8_t* payload, uint16_t len) {
+  if (connection_is_wired_mode() && type == PTYPE_AUDIO && payload && len > 0) {
+    uint16_t encoded_len = wired_audio_encoded_length(len);
+    uint8_t hdr[3] = { type, (uint8_t)(encoded_len & 0xFF), (uint8_t)((encoded_len >> 8) & 0xFF) };
+    if (!stream_write_all(transport, hdr, sizeof(hdr))) {
+      return false;
+    }
 
-bool protocol_send_packet(Client& client, uint8_t type, const uint8_t* payload, uint16_t len) {
-  if (!client.connected()) return false;
+    static uint8_t encoded_chunk[256];
+    size_t chunk_len = 0;
+    size_t usable = (size_t)(len - (len % 2));
+    for (size_t offset = 0; offset < usable; offset += 4) {
+      int16_t sample_a = (int16_t)((payload[offset + 1] << 8) | payload[offset]);
+      int16_t sample_b = sample_a;
+      if (offset + 3 < usable) {
+        sample_b = (int16_t)((payload[offset + 3] << 8) | payload[offset + 2]);
+      }
+      int32_t mixed = ((int32_t)sample_a + (int32_t)sample_b) / 2;
+      encoded_chunk[chunk_len++] = linear16_to_mulaw((int16_t)mixed);
+
+      if (chunk_len == sizeof(encoded_chunk)) {
+        if (!stream_write_all(transport, encoded_chunk, chunk_len)) {
+          return false;
+        }
+        chunk_len = 0;
+      }
+    }
+
+    if (chunk_len > 0 && !stream_write_all(transport, encoded_chunk, chunk_len)) {
+      return false;
+    }
+    return true;
+  }
 
   // 헤더: [type 1B][length_lo 1B][length_hi 1B]
   uint8_t hdr[3] = { type, (uint8_t)(len & 0xFF), (uint8_t)((len >> 8) & 0xFF) };
-  size_t written = client.write(hdr, 3);
-  if (written != 3) { client.stop(); return false; }
+  if (!stream_write_all(transport, hdr, sizeof(hdr))) { return false; }
 
   // 페이로드: partial write 대응 재시도 루프
   if (len && payload) {
-    const uint8_t* p = payload;
-    uint16_t remaining = len;
-    while (remaining > 0) {
-      size_t w = client.write(p, remaining);
-      if (w == 0) { client.stop(); return false; }  // 전송 불가 → 연결 종료
-      p += w;
-      remaining -= w;
-    }
+    if (!stream_write_all(transport, payload, len)) { return false; }
   }
   return true;
 }
@@ -371,20 +477,19 @@ bool protocol_send_packet(Client& client, uint8_t type, const uint8_t* payload, 
 // protocol_poll — 서버에서 수신된 패킷을 폴링하여 핸들러에 디스패치
 // 상태머신: RX_TYPE → RX_LEN0 → RX_LEN1 → RX_PAYLOAD → 핸들러 → RX_TYPE
 // 페이로드 단계에서는 벌크 읽기(client.read(buf, n))로 성능 최적화
-void protocol_poll(Client& client) {
-  if (!client.connected()) return;
-
-  while (client.available() > 0) {
+void protocol_poll(Stream& transport) {
+  while (transport.available() > 0) {
     // ── 벌크 읽기: 대형 오디오 패킷 (AUDIO_OUT, >2KB) ──
     if (rx_stage == RX_PAYLOAD && rx_type == PTYPE_AUDIO_OUT && rx_len > RX_MAX_PAYLOAD) {
       if (rx_audio_buf && rx_pos < rx_len) {
         size_t want = rx_len - rx_pos;
-        int avail = client.available();
+        int avail = transport.available();
         if ((size_t)avail < want) want = avail;
-        int got = client.read(rx_audio_buf + rx_pos, want);
-        if (got <= 0) break;
+        size_t got = transport.readBytes((char*)(rx_audio_buf + rx_pos), want);
+        if (got == 0) break;
         rx_pos += got;
         if (rx_pos >= rx_len) {
+          last_peer_rx_ms = millis();
           handleAudioOut(rx_audio_buf, rx_len);
           rx_stage = RX_TYPE;
         }
@@ -396,13 +501,14 @@ void protocol_poll(Client& client) {
     if (rx_stage == RX_PAYLOAD && rx_type != PTYPE_AUDIO_OUT) {
       size_t want = rx_len - rx_pos;
       if (want > RX_MAX_PAYLOAD - rx_pos) want = RX_MAX_PAYLOAD - rx_pos;
-      int avail = client.available();
+      int avail = transport.available();
       if ((size_t)avail < want) want = avail;
       if (want > 0) {
-        int got = client.read(rx_buf + rx_pos, want);
-        if (got <= 0) break;
+        size_t got = transport.readBytes((char*)(rx_buf + rx_pos), want);
+        if (got == 0) break;
         rx_pos += got;
         if (rx_pos >= rx_len) {
+          last_peer_rx_ms = millis();
           if (rx_type == PTYPE_CMD) handleCmdJson(rx_buf, rx_len);
           rx_stage = RX_TYPE;
         }
@@ -411,7 +517,7 @@ void protocol_poll(Client& client) {
     }
 
     // ── 헤더 바이트 읽기 (1바이트씩, 3B만) ──
-    int b = client.read();
+    int b = transport.read();
     if (b < 0) break;
     uint8_t byte = (uint8_t)b;
 
@@ -436,6 +542,7 @@ void protocol_poll(Client& client) {
         rx_pos = 0;
         if (rx_len == 0) {
           // 페이로드 없는 패킷 (PING, START, END 등)
+          last_peer_rx_ms = millis();
           rx_stage = RX_TYPE;
         } else {
           rx_stage = RX_PAYLOAD;
@@ -466,6 +573,7 @@ void protocol_poll(Client& client) {
         rx_pos++;
         if (rx_pos >= rx_len) {
           // 페이로드 수신 완료 → 핸들러 디스패치
+          last_peer_rx_ms = millis();
           if (rx_type == PTYPE_CMD) handleCmdJson(rx_buf, rx_len);
           else if (rx_type == PTYPE_AUDIO_OUT) {
             if (rx_len > RX_MAX_PAYLOAD) handleAudioOut(rx_audio_buf, rx_len);
@@ -480,10 +588,10 @@ void protocol_poll(Client& client) {
 
 // protocol_send_ping_if_needed — PING_INTERVAL_MS마다 keepalive 전송
 // millis() 래핑(49.7일)에 안전한 unsigned 뺄셈 사용
-void protocol_send_ping_if_needed(Client& client) {
+void protocol_send_ping_if_needed(Stream& transport, uint32_t interval_ms) {
   uint32_t now = millis();
-  if (now - last_ping_ms >= PING_INTERVAL_MS) {
-    if (protocol_send_packet(client, PTYPE_PING, nullptr, 0))
+  if (now - last_ping_ms >= interval_ms) {
+    if (protocol_send_packet(transport, PTYPE_PING, nullptr, 0))
       last_ping_ms = now;
   }
 }
@@ -495,25 +603,44 @@ void protocol_audio_process() {
   if (!audio_playing) return;
 
   size_t used_now = audio_ring_used();
+  size_t sample_bytes = audio_output_bytes_per_sample();
   // 샘플 경계가 틀어진 상태면 1바이트 버려 복구
-  if (used_now & 0x01) {
+  if (sample_bytes > 1 && (used_now & 0x01)) {
     audio_ring_tail = (audio_ring_tail + 1) % audio_ring_size;
     used_now -= 1;
   }
 
-  if (!M5.Speaker.isPlaying() && used_now >= 2) {
-    static uint8_t play_buffer[2048];
+  if (!M5.Speaker.isPlaying() && used_now >= sample_bytes) {
     static uint32_t last_playraw_fail_ms = 0;
-    size_t chunk_size = audio_ring_pop(play_buffer, sizeof(play_buffer));
-    chunk_size = (chunk_size / 2) * 2;
-    if (chunk_size >= 2) {
-      bool queued = M5.Speaker.playRaw((const int16_t*)play_buffer, chunk_size / 2, 16000, false, 1, 0);
+    size_t chunk_size = 0;
+    bool queued = false;
+
+    if (wired_tts_mode()) {
+      static uint8_t play_buffer_u8[1024];
+      static int16_t play_buffer_i16[1024];
+      chunk_size = audio_ring_pop(play_buffer_u8, sizeof(play_buffer_u8));
+      for (size_t i = 0; i < chunk_size; ++i) {
+        play_buffer_i16[i] = mulaw_to_linear16(play_buffer_u8[i]);
+      }
+      if (chunk_size >= 1) {
+        queued = M5.Speaker.playRaw(play_buffer_i16, chunk_size, audio_output_sample_rate(), false, 1, 0);
+      }
+    } else {
+      static uint8_t play_buffer[2048];
+      chunk_size = audio_ring_pop(play_buffer, sizeof(play_buffer));
+      chunk_size = (chunk_size / 2) * 2;
+      if (chunk_size >= 2) {
+        queued = M5.Speaker.playRaw((const int16_t*)play_buffer, chunk_size / 2, audio_output_sample_rate(), false, 1, 0);
+      }
+    }
+
+    if (chunk_size >= sample_bytes) {
       if (!queued) {
         // 큐 가득 참 → 데이터 되돌리고 다음 사이클에 재시도
         audio_ring_tail = (audio_ring_tail + audio_ring_size - chunk_size) % audio_ring_size;
         uint32_t now = millis();
         if (now - last_playraw_fail_ms >= 500) {
-          if (!g_serial_mode) Serial.println("[AUDIO_PROC] playRaw queue full; retry next cycle");
+          DEBUG_PRINTLN("[AUDIO_PROC] playRaw queue full; retry next cycle");
           last_playraw_fail_ms = now;
         }
       }
@@ -523,6 +650,10 @@ void protocol_audio_process() {
   // 버퍼 소진 + 재생 완료 → 재생 종료
   if (audio_ring_used() == 0 && !M5.Speaker.isPlaying()) {
     audio_playing = false;
+    if (capture_locked && capture_lock_waiting_for_playback) {
+      capture_locked = false;
+      capture_lock_waiting_for_playback = false;
+    }
   }
 }
 
@@ -539,10 +670,19 @@ bool protocol_has_audio_buffered() {
 // protocol_clear_audio_buffer — TTS 즉시 중단 (버튼 인터럽트용)
 // 링 버퍼를 비우고 스피커 하드웨어도 정지
 void protocol_clear_audio_buffer() {
-  if (audio_ring_buffer) {
-    audio_ring_head = 0;
-    audio_ring_tail = 0;
-    audio_playing = false;
-    M5.Speaker.stop();
-  }
+  audio_ring_head = 0;
+  audio_ring_tail = 0;
+  audio_playing = false;
+  capture_locked = false;
+  capture_lock_waiting_for_playback = false;
+  M5.Speaker.stop();
+}
+
+bool protocol_peer_is_alive() {
+  if (last_peer_rx_ms == 0) return false;
+  return (uint32_t)(millis() - last_peer_rx_ms) <= PROTOCOL_PEER_TIMEOUT_MS;
+}
+
+bool protocol_is_capture_locked() {
+  return capture_locked;
 }

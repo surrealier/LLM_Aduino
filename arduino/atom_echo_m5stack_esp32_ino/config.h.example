@@ -6,10 +6,16 @@
 
 #include <stdint.h>
 
+extern const char* CONNECTION_MODE;
 extern const char* SSID;
 extern const char* PASS;
 extern const char* SERVER_IP;
 extern const uint16_t SERVER_PORT;
+
+#define SERIAL_BAUD_RATE 115200
+#define WIRED_PING_INTERVAL_MS 1000
+#define PROTOCOL_PEER_TIMEOUT_MS 5000
+#define WIRED_TTS_SAMPLE_RATE 8000
 
 #define SERVO_PIN 25
 #define SERVO_MIN_ANGLE 0
@@ -27,7 +33,7 @@ extern const uint16_t SERVER_PORT;
 #define AUDIO_SAMPLE_RATE 16000
 #define AUDIO_FRAME_SIZE 320
 #define PREROLL_MS 200
-#define AUDIO_RING_BUFFER_SIZE 81920
+#define AUDIO_RING_BUFFER_SIZE 16384
 #define ENABLE_BUTTON_INTERRUPT 1
 
 #define WIFI_RECONNECT_INTERVAL_MS 5000
@@ -37,9 +43,9 @@ extern const uint16_t SERVER_PORT;
 #define LED_COLOR_CONNECTING_G 0
 #define LED_COLOR_CONNECTING_B 0
 
-#define LED_COLOR_IDLE_R 0
-#define LED_COLOR_IDLE_G 0
-#define LED_COLOR_IDLE_B 255
+#define LED_COLOR_IDLE_R 100
+#define LED_COLOR_IDLE_G 255
+#define LED_COLOR_IDLE_B 100
 
 #define LED_COLOR_RECORDING_R 0
 #define LED_COLOR_RECORDING_G 255

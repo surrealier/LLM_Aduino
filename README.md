@@ -18,7 +18,7 @@ Voice-first AI assistant for Arduino makers — speak to an Atom Echo, get intel
 
 ## 💡 What is ccoli?
 
-ccoli turns an **M5Stack Atom Echo (ESP32)** into a voice assistant powered by your PC. You speak → the device sends audio over Wi-Fi → your PC handles speech recognition, LLM reasoning, and text-to-speech → the device plays back the response.
+ccoli turns an **M5Stack Atom Echo (ESP32)** into a voice assistant powered by your PC. You speak → the device sends audio over USB or Wi-Fi → your PC handles speech recognition, LLM reasoning, and text-to-speech → the device plays back the response.
 
 No cloud required. Runs with local Ollama out of the box, or connect to Gemini / Claude / ChatGPT.
 
@@ -32,34 +32,74 @@ No cloud required. Runs with local Ollama out of the box, or connect to Gemini /
 |---|-----------|-----|
 | 🖥️ | **PC** (Windows / Mac / Linux) | Runs the ccoli server (STT + LLM + TTS) |
 | 🎤 | **M5Stack Atom Echo** (ESP32) | Captures your voice & plays responses |
-| 📶 | **Same Wi-Fi network** | Connects the two devices |
+| 🔌 | **USB-C cable** | Default wired mode, auto-detected by the server |
+| 📶 | **Same Wi-Fi network** | Optional wireless mode |
 
 ## 🚀 Quick Start
 
 ### 1. Install
 
 ```bash
-pip install -r server/requirements.txt
-pip install -e .
+curl -fsSL https://raw.githubusercontent.com/surrealier/LLM_Aduino/main/scripts/install.sh | bash
 ```
 
-### 2. Configure
+The bootstrap script installs the lightweight CLI first, then hands off the rest to `ccoli setup`.
+
+The setup wizard asks whether you want:
+- `Ollama Local` for on-device local models
+- `Cloud API` for Gemini / Claude / ChatGPT
+- `Configure Later` if you only want the runtime installed first
+
+It keeps the base install lightweight, then installs only the runtime extras this project actually uses. The default runtime no longer pulls `torch` or `transformers`.
+
+If you want to rerun onboarding later:
+
+```bash
+ccoli setup
+```
+
+Local repo / development path:
+
+```bash
+./scripts/install.sh
+# or
+python3 scripts/install.py
+```
+
+### 2. Flash firmware
+
+Open `arduino/atom_echo_m5stack_esp32_ino/atom_echo_m5stack_esp32_ino.ino` in Arduino IDE and upload to your Atom Echo.
+
+No extra setup is required for default USB wired mode.
+- If `device_secrets.h` is missing, the firmware boots in wired mode automatically
+- `ccoli start` auto-detects the Atom Echo over USB serial
+- Default wired serial speed is `115200` for broad CP210x stability on macOS
+- Wired USB audio uses `8kHz G.711 mu-law` in both directions so mic capture and TTS both fit inside the wired bandwidth budget
+- Arduino IDE upload speed can stay at `115200`; flashing speed and runtime protocol settings are still separate
+- On the first connection, the server temporarily locks mic capture while the welcome TTS is sent, then the firmware reopens it after playback ends
+
+Optional robot/display mode:
+- Install Arduino libraries `Adafruit SSD1306` and `Adafruit GFX Library`
+- Connect an external SSD1306 OLED to `G25` (SDA) and `G21` (SCL)
+
+### 3. Start
+
+```bash
+ccoli start
+```
+
+Then connect the Atom Echo to your PC with USB-C.
+- The server preloads STT and TTS once during startup so the first spoken turn does not pay the full model warmup cost.
+- LED status: red while waiting for the server link, light green when the device is connected and ready.
+- On the first healthy connection, ccoli speaks a short welcome line that picks up the recent conversation context when possible.
+
+### 4. Optional Wi-Fi mode
 
 ```bash
 ccoli config wifi MyHomeWiFi password MySecretPass port 5001
 ```
 
-Then set `SERVER_IP` in `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` to your PC's local IP.
-
-### 3. Flash firmware
-
-Open `arduino/atom_echo_m5stack_esp32_ino/atom_echo_m5stack_esp32_ino.ino` in Arduino IDE and upload to your Atom Echo.
-
-### 4. Start
-
-```bash
-ccoli start
-```
+Then set `SERVER_IP` in `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` to your PC's local IP and upload again.
 
 🎉 That's it — speak to the Atom Echo and hear the response!
 
@@ -68,7 +108,7 @@ ccoli start
 ```mermaid
 flowchart LR
     U["🗣️ You"] --> A["🎤 Atom Echo"]
-    A -->|Audio over Wi-Fi| S["🖥️ ccoli server"]
+    A -->|Audio over USB / Wi-Fi| S["🖥️ ccoli server"]
     S -->|Text| L["🧠 LLM\nOllama / Gemini / Claude / ChatGPT"]
     L -->|Response| S
     S -->|TTS audio| A
@@ -91,6 +131,7 @@ flowchart LR
 Default is Ollama (local, no API key). Switch anytime:
 
 ```bash
+ccoli setup
 ccoli config llm --provider ollama --model qwen3:8b
 ccoli config llm --provider gemini --model gemini-1.5-flash --api-key <GEMINI_API_KEY>
 ccoli config llm --provider claude --model claude-3-5-haiku-latest --api-key <ANTHROPIC_API_KEY>
@@ -145,9 +186,10 @@ Or control via voice at runtime:
 
 | Command | Description |
 |---------|-------------|
+| `ccoli setup` | Interactive installer / onboarding wizard |
 | `ccoli start` | Start the server |
 | `ccoli start --port 5002` | Start with port override |
-| `ccoli config wifi <SSID> password <PASS> port <PORT>` | Configure Wi-Fi + port |
+| `ccoli config wifi <SSID> password <PASS> port <PORT>` | Configure optional Wi-Fi mode |
 | `ccoli config llm --provider <name> [--model <m>] [--api-key <k>]` | Set LLM provider |
 | `ccoli config integration <list\|set\|enable\|disable\|test>` | Manage integrations |
 | `ccoli config voice-id <status\|enable\|disable\|delete\|threshold>` | Manage Voice ID |
@@ -190,7 +232,7 @@ ccoli/
 
 ## 🔒 Security
 
-- Never commit real credentials — use `device_secrets.h` (git-ignored)
+- Never commit real credentials — use `device_secrets.h` only for optional Wi-Fi mode (git-ignored)
 - Server secrets go in `server/.env` (see `server/env.example`)
 
 ## 📜 License

@@ -46,6 +46,10 @@ static_assert(PREROLL_SAMPLES > 0, "PREROLL_SAMPLES must be > 0 (check AUDIO_SAM
 
 // 오디오 링 버퍼 크기 검증
 static_assert(AUDIO_RING_BUFFER_SIZE >= 4096, "AUDIO_RING_BUFFER_SIZE must be >= 4096");
+static_assert(LED_COLOR_CONNECTING_R == 255 && LED_COLOR_CONNECTING_G == 0 && LED_COLOR_CONNECTING_B == 0,
+              "LED connecting color must stay red");
+static_assert(LED_COLOR_IDLE_R == 100 && LED_COLOR_IDLE_G == 255 && LED_COLOR_IDLE_B == 100,
+              "LED idle color must stay light green");
 
 // ═══════════════════════════════════════════════════════════════
 // 런타임 테스트
@@ -167,6 +171,20 @@ void test_led_show_emotion_null() {
   TEST_ASSERT(true, "led: null emotion doesn't crash");
 }
 
+void test_led_connection_state_colors() {
+  uint8_t r = 0, g = 0, b = 0;
+
+  led_show_connecting();
+  led_get_last_color(&r, &g, &b);
+  TEST_ASSERT(r == LED_COLOR_CONNECTING_R && g == LED_COLOR_CONNECTING_G && b == LED_COLOR_CONNECTING_B,
+              "led: connecting state is red");
+
+  led_show_connected();
+  led_get_last_color(&r, &g, &b);
+  TEST_ASSERT(r == LED_COLOR_IDLE_R && g == LED_COLOR_IDLE_G && b == LED_COLOR_IDLE_B,
+              "led: connected state is light green");
+}
+
 // --- Protocol 테스트 ---
 void test_protocol_init_resets_state() {
   protocol_init();
@@ -202,6 +220,8 @@ void test_config_consistency() {
   // 오디오 설정 일관성
   TEST_ASSERT(AUDIO_SAMPLE_RATE == 16000, "config: sample rate = 16kHz");
   TEST_ASSERT(AUDIO_FRAME_SIZE == 320, "config: frame size = 320 (20ms)");
+  TEST_ASSERT(SERIAL_BAUD_RATE == 115200, "config: wired serial baud = 115200");
+  TEST_ASSERT(WIRED_TTS_SAMPLE_RATE == 8000, "config: wired TTS sample rate = 8kHz");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -210,7 +230,7 @@ void test_config_consistency() {
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
-  Serial.begin(115200);
+  Serial.begin(SERIAL_BAUD_RATE);
   delay(1000);
 
   Serial.println("========================================");
@@ -234,6 +254,7 @@ void setup() {
   // LED 테스트
   test_led_no_fastled();
   test_led_show_emotion_null();
+  test_led_connection_state_colors();
 
   // Protocol 테스트
   test_protocol_init_resets_state();

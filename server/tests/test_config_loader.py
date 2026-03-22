@@ -17,6 +17,8 @@ def test_defaults_when_no_yaml_exists(tmp_path):
     cfg = Config(config_file=str(tmp_path / "missing.yaml"))
     assert cfg.get("server", "port") == 5001
     assert cfg.get("stt", "language") == "ko"
+    assert cfg.get("connection", "mode") == "auto"
+    assert cfg.get("connection", "serial_baudrate") == 115200
 
 
 def test_load_yaml_overrides_defaults(tmp_path):
@@ -34,6 +36,14 @@ def test_env_overrides_yaml(tmp_path, monkeypatch):
     monkeypatch.setenv("SERVER_PORT", "7777")
     cfg = Config(config_file=str(yaml_path))
     assert cfg.get("server", "port") == 7777
+
+
+def test_env_serial_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("SERIAL_PORT", "/dev/cu.usbserial-test")
+    monkeypatch.setenv("SERIAL_BAUDRATE", "1500000")
+    cfg = Config(config_file=str(tmp_path / "missing.yaml"))
+    assert cfg.get("connection", "serial_port") == "/dev/cu.usbserial-test"
+    assert cfg.get("connection", "serial_baudrate") == 1500000
 
 
 def test_merge_config_deep():

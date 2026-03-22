@@ -91,6 +91,10 @@ void servo_set_angle(int servo_idx, int angle) {
   servo_states[servo_idx].current_angle = angle;
 }
 
+void servo_set_angle(int angle) {
+  servo_set_angle(0, angle);
+}
+
 void servo_play_action(ServoAction action) {
   const ActionStep* steps = nullptr;
   

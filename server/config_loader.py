@@ -69,8 +69,12 @@ class Config:
             "log_dir": "logs"
         },
         "connection": {
-            "mode": "wifi",
-            "socket_timeout": 0.5
+            "mode": "auto",
+            "socket_timeout": 0.5,
+            "serial_port": "auto",
+            "serial_baudrate": 115200,
+            "serial_scan_interval": 1.0,
+            "serial_initial_idle_timeout_s": 5.0,
         },
         "queue": {
             "stt_maxsize": 4,
@@ -162,6 +166,12 @@ class Config:
             
             if "SERVER_PORT" in os.environ:
                 self.config["server"]["port"] = int(os.environ["SERVER_PORT"])
+
+            if "SERIAL_PORT" in os.environ:
+                self.config.setdefault("connection", {})["serial_port"] = os.environ["SERIAL_PORT"]
+
+            if "SERIAL_BAUDRATE" in os.environ:
+                self.config.setdefault("connection", {})["serial_baudrate"] = int(os.environ["SERIAL_BAUDRATE"])
             
             if "DEVICE" in os.environ:
                 device = os.environ["DEVICE"]

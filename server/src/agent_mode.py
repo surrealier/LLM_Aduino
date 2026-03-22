@@ -31,6 +31,21 @@ from src.intent_parser import parse_intent
 
 log = logging.getLogger(__name__)
 
+_CONNECTION_GREETING_PROMPT = """\
+방금 음성 디바이스가 홈 에이전트 '콜리'와 다시 연결됐다.
+최근 대화/메모리를 참고해서, 사용자가 듣기에 자연스러운 한국어 한 문장만 만들어라.
+
+규칙:
+- 반드시 "콜리 연결됐어요!"로 시작
+- 이어지는 문장은 최근 대화 흐름을 살짝 이어받는 안부나 질문 1개만 작성
+- 최근 맥락이 부족하면 현재 시간대에 맞는 안부를 사용
+- 설명, 따옴표, 이모지, 줄바꿈 금지
+- 전체는 짧고 가볍게
+
+실시간 최근 대화:
+{recent_context}
+"""
+
 
 class AgentMode:
     """에이전트 모드 메인 클래스 - 가정용 AI 어시스턴트 기능 제공"""
@@ -283,6 +298,80 @@ class AgentMode:
     def _get_system_prompt(self) -> str:
         """시스템 프롬프트 생성 - MemoryManager가 md 파일에서 조립"""
         return self.memory.build_system_prompt()
+
+    def _recent_conversation_excerpt(self, max_messages: int = 4) -> str:
+        history = self.conversation_history[-max(1, max_messages):]
+        if not history:
+            return "(최근 실시간 대화 없음)"
+
+        lines = []
+        for item in history:
+            role = "사용자" if item.get("role") == "user" else "콜리"
+            content = " ".join((item.get("content") or "").split()).strip()
+            if content:
+                lines.append(f"{role}: {content}")
+        return "\n".join(lines) if lines else "(최근 실시간 대화 없음)"
+
+    @staticmethod
+    def _fallback_connection_greeting(now: datetime | None = None) -> str:
+        now = now or datetime.now()
+        hour = now.hour
+
+        if 5 <= hour < 9:
+            tail = "잠 잘 주무셨어요?"
+        elif 9 <= hour < 12:
+            tail = "오늘 오전은 어떻게 보내고 계세요?"
+        elif 12 <= hour < 14:
+            tail = "점심은 드셨어요?"
+        elif 14 <= hour < 18:
+            tail = "아직 일하고 계세요?"
+        elif 18 <= hour < 21:
+            tail = "저녁은 드셨어요?"
+        elif 21 <= hour < 24:
+            tail = "오늘 하루는 어떠셨어요?"
+        else:
+            tail = "아직 안 주무시고 계세요?"
+
+        return f"콜리 연결됐어요! {tail}"
+
+    def _normalize_connection_greeting(self, text: str, now: datetime | None = None) -> str:
+        cleaned = self._sanitize_response(text or "")
+        cleaned = cleaned.replace("\n", " ").replace('"', "").replace("'", "")
+        cleaned = " ".join(cleaned.split()).strip()
+
+        if not cleaned:
+            return self._fallback_connection_greeting(now)
+
+        cleaned = re.sub(r"^콜리\s*연결됐어요[.!?]?\s*", "", cleaned).strip()
+        cleaned = cleaned.lstrip("!,. ")
+        if not cleaned:
+            return self._fallback_connection_greeting(now)
+
+        return f"콜리 연결됐어요! {cleaned}"
+
+    def generate_connection_greeting(self, now: datetime | None = None) -> str:
+        now = now or datetime.now()
+        fallback = self._fallback_connection_greeting(now)
+        if not self.llm:
+            return fallback
+
+        try:
+            system_prompt = self._get_system_prompt()
+            recent_context = self._recent_conversation_excerpt()
+            prompt = _CONNECTION_GREETING_PROMPT.format(recent_context=recent_context)
+            raw = self.llm.chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.6,
+                max_tokens=80,
+                think=False,
+            )
+            return self._normalize_connection_greeting(raw, now=now)
+        except Exception as exc:
+            log.warning("Connection greeting generation failed: %s", exc)
+            return fallback
 
     def generate_response(self, text: str, is_proactive: bool = False, speaker_id: str | None = None) -> tuple[str, str]:
         """응답 생성. Returns (response_text, intent)."""

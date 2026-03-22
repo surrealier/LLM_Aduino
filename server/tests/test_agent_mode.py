@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import numpy as np
 
 from src.agent_mode import AgentMode
@@ -6,6 +8,7 @@ from src.agent_mode import AgentMode
 def _make_agent():
     agent = AgentMode.__new__(AgentMode)
     agent._get_assistant_settings = lambda: ("아이", "cheerful")
+    agent.conversation_history = []
     return agent
 
 
@@ -76,3 +79,36 @@ def test_history_for_user_separated():
     h1.append({"role": "user", "content": "a"})
     assert h1 is not h2
     assert len(h2) == 0
+
+
+def test_generate_connection_greeting_uses_llm_context_and_prefix():
+    class _FakeMemory:
+        def build_system_prompt(self):
+            return "기억된 메모"
+
+    class _FakeLLM:
+        def __init__(self):
+            self.messages = None
+
+        def chat(self, messages, **kwargs):
+            self.messages = messages
+            return "아직 일하고 계세요?"
+
+    agent = _make_agent()
+    agent.memory = _FakeMemory()
+    agent.llm = _FakeLLM()
+    agent.conversation_history = [{"role": "user", "content": "오늘 회의 많아서 바빠"}]
+
+    greeting = agent.generate_connection_greeting()
+
+    assert greeting == "콜리 연결됐어요! 아직 일하고 계세요?"
+    assert "실시간 최근 대화" in agent.llm.messages[1]["content"]
+
+
+def test_generate_connection_greeting_falls_back_by_time():
+    agent = _make_agent()
+    agent.llm = None
+
+    greeting = agent.generate_connection_greeting(now=datetime(2026, 3, 17, 8, 0))
+
+    assert greeting == "콜리 연결됐어요! 잠 잘 주무셨어요?"

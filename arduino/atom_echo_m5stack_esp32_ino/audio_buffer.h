@@ -12,9 +12,9 @@
 #ifndef AUDIO_BUFFER_H
 #define AUDIO_BUFFER_H
 
+#include <Arduino.h>
 #include <stdint.h>
 #include <stddef.h>
-#include <Client.h>
 #include "config.h"
 
 // 프리롤 버퍼 크기 (샘플 수) — 컴파일 타임 계산
@@ -35,6 +35,6 @@ void preroll_init(PrerollBuffer* pr);
 void preroll_push(PrerollBuffer* pr, const int16_t* x, size_t n);
 
 // 버퍼 내용을 시간순으로 서버에 AUDIO 패킷으로 전송
-void preroll_send(PrerollBuffer* pr, Client& client);
+void preroll_send(PrerollBuffer* pr, Stream& transport);
 
 #endif

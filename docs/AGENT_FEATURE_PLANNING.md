@@ -62,11 +62,15 @@
   - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest -m protocol`
 
 ### EPIC-D: 연결/설정 UX 개선 (PRD 5.1)
-- [x] (SA-3, DONE) `server/config.yaml` 연결 모드 스키마(`wifi|wired`) 확장
+- [x] (SA-3, DONE) `ccoli setup` 대화형 설치 위저드 추가(Ollama local / Cloud API / later)
+- [x] (SA-3, DONE) Python 의존성을 base/runtime/test profile로 분리하고 기본 경로에서 무거운 미사용 패키지 제거
+- [x] (SA-3, DONE) `server/config.yaml` 연결 모드 스키마(`auto|wifi|wired`) 확장
 - [x] (SA-3, DONE) `ccoli config wifi ...`를 연결 모드 지원 CLI로 리팩터링
 - [x] (SA-3, DONE) firmware `device_secrets.h`와 키 이름/의미 1:1 동기화
 - [x] (SA-3, DONE) 설정 검증 에러를 행동 유도형 메시지로 통일
+- [x] (SA-3, DONE) USB serial wired 런타임 추가 및 `ccoli start` auto-detect 경로 구현
 - 검증:
+  - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest server/tests/test_cli_setup.py server/tests/test_cli_smoke.py`
   - `pytest server/tests/test_cli_integration.py -k config`
   - `pytest server/tests/test_connection.py`
 

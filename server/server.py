@@ -21,8 +21,7 @@ import yaml
 from config_loader import get_config
 from src.agent_mode import AgentMode
 from src.audio_processor import normalize_to_dbfs, qc, save_wav, trim_energy
-from src.connection_manager import ConnectionManager
-from src.serial_connection_manager import SerialConnectionManager
+from src.connection_manager import build_connection_manager
 from src.input_gate import InputGate
 from src.job_queue import JobQueue
 from src.llm_client import LLMClient
@@ -32,7 +31,7 @@ from src.protocol import (
     PTYPE_END,
     PTYPE_PING,
     PTYPE_START,
-    recv_exact,
+    recv_packet,
     send_action,
     send_audio,
     send_pong,
@@ -57,6 +56,23 @@ current_mode = "agent"  # Default mode: agent
 # Mode handler instances
 robot_handler = None
 agent_handler = None
+
+
+def _build_interrupt_handler(perf_logger):
+    def _handler(signum, _frame):
+        log = __import__("logging").getLogger("server")
+        try:
+            sig_name = signal.Signals(signum).name
+        except Exception:
+            sig_name = str(signum)
+
+        log.info("Shutdown requested via %s", sig_name)
+        try:
+            perf_logger.print_stats()
+        finally:
+            raise KeyboardInterrupt
+
+    return _handler
 
 
 def load_commands_config(path: str = "commands.yaml"):
@@ -134,7 +150,226 @@ def ensure_ollama_running(base_url: str, llm_config: dict):
     return False
 
 
-def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_service: VoiceIDService | None = None):
+def _send_connection_greeting(
+    conn,
+    send_lock: threading.Lock,
+    agent,
+    runtime_state: dict | None = None,
+    input_gate: InputGate | None = None,
+) -> bool:
+    log = __import__("logging").getLogger("server")
+
+    if current_mode != "agent" or agent is None:
+        return False
+
+    if runtime_state is not None and runtime_state.get("connection_greeting_sent"):
+        return False
+
+    if input_gate is not None and (input_gate.has_active_stream() or input_gate.is_busy()):
+        log.info("Skipping connection greeting while input stream is active")
+        return False
+
+    lock_sent = send_action(conn, {"action": "MIC_LOCK"}, send_lock)
+    if not lock_sent:
+        log.warning("Failed to lock mic before connection greeting")
+        return False
+
+    greeting = agent.generate_connection_greeting()
+    if not greeting:
+        send_action(conn, {"action": "MIC_UNLOCK"}, send_lock)
+        return False
+
+    wav_bytes = agent.text_to_audio(greeting, trim_pad_ms=90.0)
+    if not wav_bytes:
+        log.warning("Connection greeting TTS generation returned empty audio")
+        send_action(conn, {"action": "MIC_UNLOCK"}, send_lock)
+        return False
+
+    if input_gate is not None and (input_gate.has_active_stream() or input_gate.is_busy()):
+        log.info("Dropping connection greeting because input stream became active")
+        send_action(conn, {"action": "MIC_UNLOCK"}, send_lock)
+        return False
+
+    ok = send_audio(conn, wav_bytes, send_lock)
+    if ok:
+        if runtime_state is not None:
+            runtime_state["connection_greeting_sent"] = True
+        log.info("Connection greeting sent: %s", greeting)
+    else:
+        log.warning("Failed to send connection greeting audio")
+        send_action(conn, {"action": "MIC_UNLOCK"}, send_lock)
+    return ok
+
+
+def _prime_connection(conn, addr, send_lock: threading.Lock) -> bool:
+    log = __import__("logging").getLogger("server")
+
+    if not (isinstance(addr, tuple) and len(addr) >= 2 and addr[0] == "serial"):
+        return False
+
+    ok = send_pong(conn, send_lock)
+    if ok:
+        log.info("Primed wired serial link on %s with initial PONG", addr[1])
+    else:
+        log.warning("Failed to prime wired serial link on %s", addr[1])
+    return ok
+
+
+def _start_connection_greeting(
+    conn,
+    send_lock: threading.Lock,
+    agent,
+    runtime_state: dict | None = None,
+    input_gate: InputGate | None = None,
+):
+    thread = threading.Thread(
+        target=_send_connection_greeting,
+        args=(conn, send_lock, agent, runtime_state, input_gate),
+        daemon=True,
+        name="connection-greeting",
+    )
+    thread.start()
+    return thread
+
+
+def _send_tts_chunks(conn, send_lock: threading.Lock, audio_payloads: list[bytes]) -> bool:
+    log = __import__("logging").getLogger("server")
+
+    payloads = [chunk for chunk in audio_payloads if chunk]
+    if not payloads:
+        return False
+
+    lock_sent = send_action(conn, {"action": "MIC_LOCK"}, send_lock)
+    if not lock_sent:
+        log.warning("Failed to lock mic before TTS playback")
+        return False
+
+    total_audio_chunks = len(payloads)
+    for idx, chunk_bytes in enumerate(payloads, start=1):
+        if total_audio_chunks > 1:
+            log.info(
+                "Sending audio chunk %d/%d: %d bytes",
+                idx,
+                total_audio_chunks,
+                len(chunk_bytes),
+            )
+        ok = send_audio(conn, chunk_bytes, send_lock)
+        if not ok:
+            log.warning("Failed to send audio chunk %d/%d", idx, total_audio_chunks)
+            send_action(conn, {"action": "MIC_UNLOCK"}, send_lock)
+            return False
+
+    return True
+
+
+def _build_tts_audio_payloads(agent, response_text: str, max_chunks: int = 3) -> list[bytes]:
+    log = __import__("logging").getLogger("server")
+
+    tts_text_chunks = agent.prepare_tts_chunks(response_text, max_chunks=max_chunks)
+    if not tts_text_chunks:
+        log.error("TTS text chunks are empty after sanitization")
+        return []
+
+    if len(tts_text_chunks) > 1:
+        log.info("TTS text split into %d chunks", len(tts_text_chunks))
+
+    audio_chunks = []
+    total_chunks = len(tts_text_chunks)
+    failed_chunks = []
+
+    for idx, tts_text in enumerate(tts_text_chunks, start=1):
+        trim_pad_ms = 140.0
+        if total_chunks > 1:
+            if idx == 1 or idx == total_chunks:
+                trim_pad_ms = 80.0
+            else:
+                trim_pad_ms = 40.0
+        wav_bytes = agent.text_to_audio(
+            tts_text,
+            trim_pad_ms=trim_pad_ms,
+        )
+        if wav_bytes:
+            audio_chunks.append(wav_bytes)
+        else:
+            failed_chunks.append(tts_text)
+            log.error(
+                "TTS chunk failed (%d/%d): %s",
+                idx,
+                total_chunks,
+                tts_text,
+            )
+
+    if not audio_chunks:
+        log.error("All TTS chunks failed")
+        return []
+
+    if failed_chunks:
+        fallback_text = " ".join(tts_text_chunks).strip()
+        log.warning(
+            "Retrying TTS as a single pass after %d chunk failure(s)",
+            len(failed_chunks),
+        )
+        fallback_audio = agent.text_to_audio(fallback_text, trim_pad_ms=90.0)
+        if fallback_audio:
+            return [fallback_audio]
+        return audio_chunks
+
+    if len(audio_chunks) == 1:
+        return audio_chunks
+
+    merged_audio = agent.merge_audio_chunks(
+        audio_chunks,
+        sr=SR,
+        crossfade_ms=12.0,
+    )
+    if not merged_audio:
+        log.error("Merged TTS audio is empty")
+        return audio_chunks
+
+    log.info("Merged %d TTS chunks into 1 continuous payload", len(audio_chunks))
+    return [merged_audio]
+
+
+def _warm_up_runtime_assets(stt_engine: STTEngine, agent) -> dict[str, bool]:
+    log = __import__("logging").getLogger("server")
+    status = {"stt_ready": False, "tts_ready": False}
+
+    try:
+        log.info("Warming STT model before accepting connections...")
+        stt_engine.ensure_model()
+        status["stt_ready"] = stt_engine.model is not None
+        if status["stt_ready"]:
+            log.info("STT warmup complete")
+        else:
+            log.warning("STT warmup completed without a loaded model")
+    except Exception as exc:
+        log.warning("STT warmup failed: %s", exc, exc_info=True)
+
+    if agent is None:
+        return status
+
+    try:
+        log.info("Warming TTS voice before accepting connections...")
+        warmup_audio = agent.text_to_audio("준비됐어요.", trim_pad_ms=0.0)
+        status["tts_ready"] = bool(warmup_audio)
+        if status["tts_ready"]:
+            log.info("TTS warmup complete")
+        else:
+            log.warning("TTS warmup returned empty audio")
+    except Exception as exc:
+        log.warning("TTS warmup failed: %s", exc, exc_info=True)
+
+    return status
+
+
+def handle_connection(
+    conn,
+    addr,
+    stt_engine: STTEngine,
+    config,
+    voice_id_service: VoiceIDService | None = None,
+    runtime_state: dict | None = None,
+):
     global current_mode, robot_handler, agent_handler
 
     log = __import__("logging").getLogger("server")
@@ -148,6 +383,8 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
         pass
 
     send_lock = threading.Lock()
+    _prime_connection(conn, addr, send_lock)
+
     job_queue = JobQueue(
         stt_maxsize=config.get("queue", "stt_maxsize", default=4),
         tts_maxsize=config.get("queue", "tts_maxsize", default=2),
@@ -158,6 +395,18 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
     state_lock = threading.Lock()
     stop_event = threading.Event()
     input_gate = InputGate()
+    connection_greeting_thread = None
+    connection_greeting_attempted = False
+
+    if current_mode == "agent":
+        connection_greeting_thread = _start_connection_greeting(
+            conn,
+            send_lock,
+            agent_handler,
+            runtime_state,
+            input_gate,
+        )
+        connection_greeting_attempted = connection_greeting_thread is not None
 
     def worker():
         global current_mode
@@ -233,21 +482,21 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
                         msg = voice_id_service.begin_register(user)
                         wav_bytes = agent_handler.text_to_audio(msg)
                         if wav_bytes:
-                            send_audio(conn, wav_bytes, send_lock)
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
                         input_gate.mark_idle()
                         continue
                     if text.startswith("@@") and "화자 인식 켜" in text:
                         voice_id_service.set_enabled(True)
                         wav_bytes = agent_handler.text_to_audio("화자 인식을 켰어요.")
                         if wav_bytes:
-                            send_audio(conn, wav_bytes, send_lock)
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
                         input_gate.mark_idle()
                         continue
                     if text.startswith("@@") and "화자 인식 꺼" in text:
                         voice_id_service.set_enabled(False)
                         wav_bytes = agent_handler.text_to_audio("화자 인식을 껐어요.")
                         if wav_bytes:
-                            send_audio(conn, wav_bytes, send_lock)
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
                         input_gate.mark_idle()
                         continue
                     if text.startswith("@@") and "목소리 삭제" in text:
@@ -256,7 +505,7 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
                         msg = f"{user} 목소리 정보를 삭제했어요." if deleted else f"{user} 사용자 목소리 정보를 찾지 못했어요."
                         wav_bytes = agent_handler.text_to_audio(msg)
                         if wav_bytes:
-                            send_audio(conn, wav_bytes, send_lock)
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
                         input_gate.mark_idle()
                         continue
 
@@ -264,7 +513,7 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
                     if register_msg:
                         wav_bytes = agent_handler.text_to_audio(register_msg)
                         if wav_bytes:
-                            send_audio(conn, wav_bytes, send_lock)
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
                         input_gate.mark_idle()
                         continue
 
@@ -287,7 +536,7 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
                     if current_mode == "agent":
                         wav_bytes = agent_handler.text_to_audio(notify_text)
                         if wav_bytes:
-                            send_audio(conn, wav_bytes, send_lock)
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
                     else:
                         send_action(conn, {"action": "WIGGLE", "sid": sid}, send_lock)
 
@@ -319,7 +568,7 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
                     if response_text and agent_handler:
                         wav_bytes = agent_handler.text_to_audio(response_text)
                         if wav_bytes:
-                            send_audio(conn, wav_bytes, send_lock)
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
 
                 elif current_mode == "agent":
                     if not text:
@@ -332,7 +581,7 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
                             if gate_result.message:
                                 wav_bytes = agent_handler.text_to_audio(gate_result.message)
                                 if wav_bytes:
-                                    send_audio(conn, wav_bytes, send_lock)
+                                    _send_tts_chunks(conn, send_lock, [wav_bytes])
                             input_gate.mark_idle()
                             continue
                         speaker_id = gate_result.user
@@ -352,50 +601,15 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
 
                     if response:
                         log.info("Agent Response: %s", response)
-                        tts_text_chunks = agent_handler.prepare_tts_chunks(response, max_chunks=3)
-                        if not tts_text_chunks:
-                            log.error("TTS text chunks are empty after sanitization")
-                            continue
-                        if len(tts_text_chunks) > 1:
-                            log.info("TTS text split into %d chunks", len(tts_text_chunks))
-
                         tts_start = time.time()
-                        audio_payloads = []
-                        total_chunks = len(tts_text_chunks)
-                        for idx, tts_text in enumerate(tts_text_chunks, start=1):
-                            trim_pad_ms = 140.0
-                            if total_chunks > 1:
-                                if idx == 1 or idx == total_chunks:
-                                    trim_pad_ms = 80.0
-                                else:
-                                    trim_pad_ms = 40.0
-                            wav_bytes = agent_handler.text_to_audio(
-                                tts_text,
-                                trim_pad_ms=trim_pad_ms,
-                            )
-                            if wav_bytes:
-                                audio_payloads.append(wav_bytes)
-                            else:
-                                log.error(
-                                    "TTS chunk failed (%d/%d): %s",
-                                    idx,
-                                    total_chunks,
-                                    tts_text,
-                                )
+                        audio_payloads = _build_tts_audio_payloads(
+                            agent_handler,
+                            response,
+                            max_chunks=3,
+                        )
                         perf_logger.log_tts(time.time() - tts_start)
 
                         if not audio_payloads:
-                            log.error("All TTS chunks failed")
-                            continue
-
-                        audio_payloads = agent_handler.crossfade_audio_boundaries(
-                            audio_payloads,
-                            sr=SR,
-                            crossfade_ms=12.0,
-                        )
-                        audio_payloads = [chunk for chunk in audio_payloads if chunk]
-                        if not audio_payloads:
-                            log.error("Crossfaded TTS audio is empty")
                             continue
 
                         if len(audio_payloads) > 1:
@@ -404,18 +618,9 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
                                 len(audio_payloads),
                             )
 
-                        total_audio_chunks = len(audio_payloads)
-                        for idx, chunk_bytes in enumerate(audio_payloads, start=1):
-                            log.info(
-                                "Sending audio chunk %d/%d: %d bytes",
-                                idx,
-                                total_audio_chunks,
-                                len(chunk_bytes),
-                            )
-                            success = send_audio(conn, chunk_bytes, send_lock)
-                            if not success:
-                                log.error("Failed to send audio chunk %d/%d", idx, total_audio_chunks)
-                                break
+                        success = _send_tts_chunks(conn, send_lock, audio_payloads)
+                        if not success:
+                            log.error("Failed to send agent response audio")
                     else:
                         log.error("Agent generated empty response")
 
@@ -436,32 +641,33 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
 
     while True:
         try:
-            t = recv_exact(conn, 1)
-            if t is None:
+            packet = recv_packet(conn)
+            if packet is None:
                 log.info("Disconnect detected")
                 break
-            ptype = t[0]
-
-            raw_len = recv_exact(conn, 2)
-            if raw_len is None:
-                log.info("Disconnect (len)")
-                break
-            (plen,) = __import__("struct").unpack("<H", raw_len)
-
-            payload = b""
-            if plen:
-                payload = recv_exact(conn, plen)
-                if payload is None:
-                    log.info("Disconnect (payload)")
-                    break
+            ptype, payload = packet
 
             # Handle protocol packet types
             if ptype == PTYPE_PING:
                 send_pong(conn, send_lock)
+                if (
+                    not connection_greeting_attempted
+                    and not input_gate.has_active_stream()
+                    and not input_gate.is_busy()
+                ):
+                    connection_greeting_attempted = True
+                    connection_greeting_thread = _start_connection_greeting(
+                        conn,
+                        send_lock,
+                        agent_handler,
+                        runtime_state,
+                        input_gate,
+                    )
                 continue
 
             # Handle voice stream start
             if ptype == PTYPE_START:
+                connection_greeting_attempted = True
                 accepted = input_gate.start_stream()
                 audio_buf = bytearray()
 
@@ -539,8 +745,10 @@ def handle_connection(conn, addr, stt_engine: STTEngine, config, voice_id_servic
         job_queue.put(job_queue.stt_queue, None, drop_oldest=False)
     except Exception:
         pass
-    
+
     worker_thread.join(timeout=2)
+    if connection_greeting_thread is not None:
+        connection_greeting_thread.join(timeout=0.2)
     log.info("Connection closed: %s", addr)
 
 
@@ -615,6 +823,12 @@ def main():
     )
 
     stt_engine = STTEngine(model_size=model_size, device=device, language=language)
+    warmup_status = _warm_up_runtime_assets(stt_engine, agent_handler)
+    log.info(
+        "Runtime warmup: stt_ready=%s tts_ready=%s",
+        warmup_status["stt_ready"],
+        warmup_status["tts_ready"],
+    )
 
     voice_cfg = config.get_voice_id_config() if hasattr(config, "get_voice_id_config") else {}
     voice_id_service = VoiceIDService(
@@ -624,24 +838,32 @@ def main():
     )
 
     perf_logger = get_performance_logger()
-    signal.signal(signal.SIGINT, lambda *_: perf_logger.print_stats())
+    interrupt_handler = _build_interrupt_handler(perf_logger)
+    signal.signal(signal.SIGINT, interrupt_handler)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, interrupt_handler)
 
-    _handler = lambda conn, addr: handle_connection(conn, addr, stt_engine, config, voice_id_service)
+    runtime_state = {"connection_greeting_sent": False}
 
-    # USB 시리얼 리스너 — WiFi TCP와 병렬로 실행 (daemon thread)
-    serial_manager = SerialConnectionManager(handler=_handler)
-    serial_thread = threading.Thread(target=serial_manager.accept_loop, daemon=True)
-    serial_thread.start()
-    log.info("Serial listener started (auto-detecting ESP32 port)")
-
-    conn_manager = ConnectionManager(
-        host=host,
-        port=port,
-        handler=_handler,
+    conn_manager = build_connection_manager(
+        config,
+        handler=lambda conn, addr: handle_connection(
+            conn,
+            addr,
+            stt_engine,
+            config,
+            voice_id_service,
+            runtime_state,
+        ),
     )
     log.info("Server started. Default Mode: %s", current_mode)
-    conn_manager.accept_loop()
+    try:
+        conn_manager.accept_loop()
+    except KeyboardInterrupt:
+        log.info("Server shutdown complete.")
+        return 130
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

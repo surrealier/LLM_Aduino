@@ -6,7 +6,7 @@
 //       and runs cooperative multitasking in the main loop.
 //
 // Flow:
-//   setup() -> hardware initialization -> start WiFi connection
+//   setup() -> hardware initialization -> start wired/Wi-Fi transport
 //   loop()  -> connection management -> protocol TX/RX -> TTS playback ->
 //             half-duplex mic switching -> VAD voice detection ->
 //             LED/servo updates
@@ -23,31 +23,37 @@
 #include "config.h"
 #include "audio_buffer.h"
 #include "connection.h"
+#include "display_control.h"
 #include "led_control.h"
 #include "protocol.h"
-#include "serial_client.h"
 #include "servo_control.h"
 #include "vad.h"
 
-// ────────────────────────────────────────────
-// Network credentials and server address (define actual values here)
-// Definitions corresponding to extern declarations in config.h
-// ────────────────────────────────────────────
-const char* SSID = "KT_GiGA_3926";
-const char* PASS = "fbx7bef119";
-const char* SERVER_IP = "172.30.1.20";
+#if defined(__has_include)
+  #if __has_include("device_secrets.h")
+    #include "device_secrets.h"
+  #else
+const char* CONNECTION_MODE = "wired";
+const char* SSID = "";
+const char* PASS = "";
+const char* SERVER_IP = "";
 const uint16_t SERVER_PORT = 5001;
+  #endif
+#else
+const char* CONNECTION_MODE = "wired";
+const char* SSID = "";
+const char* PASS = "";
+const char* SERVER_IP = "";
+const uint16_t SERVER_PORT = 5001;
+#endif
+
+#define DEBUG_PRINTLN(msg) do { if (connection_debug_logging_enabled()) Serial.println(msg); } while (0)
+#define DEBUG_PRINTF(...) do { if (connection_debug_logging_enabled()) Serial.printf(__VA_ARGS__); } while (0)
 
 // ────────────────────────────────────────────
 // Global state objects
 // ────────────────────────────────────────────
 WiFiClient client;               // TCP socket (WiFi 모드)
-SerialClient serial_client(Serial);  // USB Serial 래퍼 (Serial 모드)
-Client* transport = nullptr;     // 현재 활성 전송 레이어 포인터
-
-// 전송 모드 선택 상태
-bool g_serial_mode = false;      // true → Serial 모드, false → WiFi 모드 (protocol.cpp에서 extern)
-static bool transport_decided = false;
 
 ConnectionState conn_state;  // WiFi/server connection state machine
 VadState vad_state;          // Voice activity detection state
@@ -67,12 +73,12 @@ static bool speaker_reinit() {
   M5.Speaker.stop();
   M5.Speaker.end();
   auto spk_cfg = M5.Speaker.config();
-  spk_cfg.sample_rate = AUDIO_SAMPLE_RATE;
+  spk_cfg.sample_rate = connection_is_wired_mode() ? WIRED_TTS_SAMPLE_RATE : AUDIO_SAMPLE_RATE;
   M5.Speaker.config(spk_cfg);
   bool ok = M5.Speaker.begin();
   M5.Speaker.setVolume(180);
   if (!ok) {
-    Serial.println("[AUDIO] Speaker begin failed");
+    DEBUG_PRINTLN("[AUDIO] Speaker begin failed");
   }
   return ok;
 }
@@ -87,7 +93,7 @@ static bool mic_reinit() {
   M5.Mic.config(mic_cfg);
   bool ok = M5.Mic.begin();
   if (!ok) {
-    Serial.println("[AUDIO] Mic begin failed");
+    DEBUG_PRINTLN("[AUDIO] Mic begin failed");
   }
   return ok;
 }
@@ -115,7 +121,8 @@ void setup() {
   cfg.internal_mic = true;
   cfg.internal_spk = true;
   M5.begin(cfg);
-  Serial.begin(115200);
+  Serial.begin(SERIAL_BAUD_RATE);
+  Serial.setTimeout(0);
   delay(500);  // Wait for serial stabilization
 
   // Initialize LED -> indicate connecting (red)
@@ -123,15 +130,14 @@ void setup() {
   servo_init();
   display_init();
   display_show_face(FACE_NEUTRAL);
-  led_set_color(LED_COLOR_CONNECTING_R, LED_COLOR_CONNECTING_G, LED_COLOR_CONNECTING_B);
+  led_show_connecting();
 
-  // Start WiFi connection (async; state tracked in connection_manage)
+  // Start the configured transport (USB wired or Wi-Fi)
   connection_init(&conn_state, SSID, PASS);
 
   auto spk_cfg = M5.Speaker.config();
   auto mic_cfg = M5.Mic.config();
-  // g_serial_mode는 아직 false이므로 여기서는 항상 출력 가능
-  Serial.printf(
+  DEBUG_PRINTF(
       "[BOOT] board=%d spk(bck=%d ws=%d dout=%d i2s=%d) mic(bck=%d ws=%d din=%d i2s=%d)\n",
       (int)M5.getBoard(),
       (int)spk_cfg.pin_bck,
@@ -142,8 +148,6 @@ void setup() {
       (int)mic_cfg.pin_ws,
       (int)mic_cfg.pin_data_in,
       (int)mic_cfg.i2s_port);
-  Serial.printf("[BOOT] WiFi timeout=%dms, Serial baud=%d\n",
-      WIFI_CONNECT_TIMEOUT_MS, SERIAL_BAUD_RATE);
 
   // Default idle state keeps mic enabled (input) and speaker released from I2S resources
   mic_reinit();
@@ -166,57 +170,28 @@ void loop() {
   if (M5.BtnA.wasPressed()) {
     if (protocol_is_audio_playing()) {
       protocol_clear_audio_buffer();
-      Serial.println("[BUTTON] TTS interrupted");
+      DEBUG_PRINTLN("[BUTTON] TTS interrupted");
     }
   }
   #endif
 
   // -- 전송 레이어 자동 감지 및 연결 관리 --
-  if (!transport_decided) {
-    if (WiFi.status() == WL_CONNECTED && conn_state.server_connected) {
-      // WiFi 연결 성공 → WiFi 모드 확정
-      g_serial_mode = false;
-      transport = &client;
-      transport_decided = true;
-      Serial.println("[TRANSPORT] WiFi mode selected");
-    } else if (millis() > WIFI_CONNECT_TIMEOUT_MS) {
-      // WiFi 타임아웃 → Serial 모드로 전환
-      g_serial_mode = true;
-      Serial.end();
-      Serial.begin(SERIAL_BAUD_RATE);
-      while (!Serial) { delay(10); }
-      serial_client.setConnected(true);
-      transport = &serial_client;
-      transport_decided = true;
-      // Cyan LED = Serial 모드 표시
-      led_set_color(0, 255, 255);
-    } else {
-      // WiFi 연결 시도 중
-      connection_manage(&conn_state, client);
-      delay(100);
-      return;
-    }
+  connection_manage(&conn_state, client);
+  if (!connection_transport_ready(&conn_state)) {
+    delay(100);
+    return;
   }
 
-  // WiFi 모드: 연결 상태 유지
-  if (!g_serial_mode) {
-    connection_manage(&conn_state, client);
-    if (!connection_is_server_connected(&conn_state)) {
-      delay(100);
-      return;
-    }
-    transport = &client;
-  } else {
-    // Serial 모드: USB가 끊기면 재연결 대기
-    if (!serial_client.connected()) {
-      delay(100);
-      return;
-    }
+  Stream& transport = connection_stream(client);
+  protocol_send_ping_if_needed(transport, connection_ping_interval_ms());
+  protocol_poll(transport);
+
+  // If server is disconnected, wait 100ms and retry (CPU saving)
+  if (!connection_is_server_connected(&conn_state)) {
+    delay(connection_is_wired_mode() ? 10 : 100);
+    return;
   }
 
-  // -- Protocol TX/RX --
-  protocol_send_ping_if_needed(*transport);  // Keepalive PING every 3 seconds
-  protocol_poll(*transport);                  // Receive and dispatch server->ESP32 packets
   // Perform audio playback after mic switching
 
   // -- Half-duplex mic/speaker switching --
@@ -235,7 +210,7 @@ void loop() {
     M5.Mic.end();
     if (speaker_reinit()) {
       mic_disabled = true;
-      Serial.println("[AUDIO] Mic end -> Speaker reinit");
+      DEBUG_PRINTLN("[AUDIO] Mic end -> Speaker reinit");
       vad_init(&vad_state);     // Reset VAD state (invalidate leftover voice data)
       preroll_init(&preroll);   // Reset pre-roll buffer
     } else {
@@ -243,7 +218,7 @@ void loop() {
       protocol_clear_audio_buffer();
       mic_reinit();
       mic_disabled = false;
-      Serial.println("[AUDIO] Speaker reinit failed -> Mic restored");
+      DEBUG_PRINTLN("[AUDIO] Speaker reinit failed -> Mic restored");
     }
   }
 
@@ -256,11 +231,11 @@ void loop() {
     // TTS playback completed -> re-enable mic
     mic_reinit();
     mic_disabled = false;
-    Serial.println("[AUDIO] Mic begin (after TTS)");
+    DEBUG_PRINTLN("[AUDIO] Mic begin (after TTS)");
   }
 
   // -- Voice input processing (only when mic is enabled and TTS is not playing) --
-  if (!mic_disabled && !is_playing && !has_buffered_audio && cooldown_done) {
+  if (!mic_disabled && !is_playing && !has_buffered_audio && cooldown_done && !protocol_is_capture_locked()) {
     static int16_t frame_buf[AUDIO_FRAME_SIZE];  // 20ms frame buffer (static: saves stack)
 
     if (M5.Mic.record(frame_buf, AUDIO_FRAME_SIZE, AUDIO_SAMPLE_RATE)) {
@@ -279,16 +254,16 @@ void loop() {
       if (event == VAD_START) {
         // Speech start detected -> LED green + START packet + pre-roll send
         led_set_color(LED_COLOR_RECORDING_R, LED_COLOR_RECORDING_G, LED_COLOR_RECORDING_B);
-        if (protocol_send_packet(*transport, PTYPE_START, nullptr, 0)) {
-          preroll_send(&preroll, *transport);
+        if (protocol_send_packet(transport, PTYPE_START, nullptr, 0)) {
+          preroll_send(&preroll, transport);
         }
       } else if (event == VAD_CONTINUE) {
         // During speech -> send current frame as AUDIO packet
-        protocol_send_packet(*transport, PTYPE_AUDIO, (uint8_t*)frame_buf, AUDIO_FRAME_SIZE * sizeof(int16_t));
+        protocol_send_packet(transport, PTYPE_AUDIO, (uint8_t*)frame_buf, AUDIO_FRAME_SIZE * sizeof(int16_t));
       } else if (event == VAD_END) {
-        // Speech end -> END packet + LED blue (idle)
-        protocol_send_packet(*transport, PTYPE_END, nullptr, 0);
-        led_set_color(LED_COLOR_IDLE_R, LED_COLOR_IDLE_G, LED_COLOR_IDLE_B);
+        // Speech end -> END packet + LED light green (connected idle)
+        protocol_send_packet(transport, PTYPE_END, nullptr, 0);
+        led_show_connected();
       }
     }
   }

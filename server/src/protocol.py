@@ -22,8 +22,110 @@ PTYPE_CMD = 0x11            # 명령 전송 (서버 → ESP32)
 PTYPE_AUDIO_OUT = 0x12      # 오디오 출력 데이터 (서버 → ESP32)
 PTYPE_BUFFER_STATUS = 0x13  # 버퍼 상태 보고 (선택적)
 
+_ZERO_PAYLOAD_PACKET_TYPES = {
+    PTYPE_START,
+    PTYPE_END,
+    PTYPE_PING,
+}
+_MAX_INCOMING_AUDIO_PAYLOAD = 16_384
+_MAX_INCOMING_BUFFER_STATUS_PAYLOAD = 1_024
+WIRED_TTS_SAMPLE_RATE = 8_000
+WIRED_TTS_BYTES_PER_SAMPLE = 1
+WIRED_TTS_AUDIO_CHUNK = 512
+_MULAW_BIAS = 0x84
+_MULAW_CLIP = 32635
 
-def recv_exact(conn: socket.socket, n: int, max_timeouts: int = 120) -> Optional[bytes]:
+
+def _is_serial_like_connection(conn: socket.socket) -> bool:
+    return hasattr(conn, "serial") and hasattr(conn, "port_name")
+
+
+def _linear16_to_mulaw(sample: int) -> int:
+    if sample < 0:
+        sign = 0x80
+        sample = -sample
+    else:
+        sign = 0x00
+
+    if sample > _MULAW_CLIP:
+        sample = _MULAW_CLIP
+
+    sample += _MULAW_BIAS
+    exponent = 7
+    mask = 0x4000
+    while exponent > 0 and (sample & mask) == 0:
+        exponent -= 1
+        mask >>= 1
+    mantissa = (sample >> (exponent + 3)) & 0x0F
+    return (~(sign | (exponent << 4) | mantissa)) & 0xFF
+
+
+def _mulaw_to_linear16(value: int) -> int:
+    value = (~value) & 0xFF
+    sign = value & 0x80
+    exponent = (value >> 4) & 0x07
+    mantissa = value & 0x0F
+    sample = ((_MULAW_BIAS + (mantissa << 3)) << exponent) - _MULAW_BIAS
+    return -sample if sign else sample
+
+
+def _encode_serial_audio_payload(pcm_bytes: bytes) -> bytes:
+    """
+    Transcode PCM16LE/16kHz mono to G.711 mu-law/8kHz mono for wired USB links.
+
+    This halves the sample rate and compresses each sample to 8-bit so 115200
+    baud can carry wired audio without starving microphone capture. A light
+    smoothing stage reduces wired-only high-frequency hiss before mu-law encode.
+    """
+    usable = len(pcm_bytes) - (len(pcm_bytes) % 2)
+    if usable <= 0:
+        return b""
+
+    encoded = bytearray((usable // 4) + (1 if usable % 4 else 0))
+    out_idx = 0
+    prev_filtered = None
+    for offset in range(0, usable, 4):
+        sample_a = int.from_bytes(pcm_bytes[offset : offset + 2], "little", signed=True)
+        if offset + 4 <= usable:
+            sample_b = int.from_bytes(pcm_bytes[offset + 2 : offset + 4], "little", signed=True)
+        else:
+            sample_b = sample_a
+        mixed = int((sample_a + sample_b) / 2)
+        if prev_filtered is None:
+            filtered = mixed
+        else:
+            filtered = int((prev_filtered + (mixed * 3)) / 4)
+        encoded[out_idx] = _linear16_to_mulaw(filtered)
+        prev_filtered = filtered
+        out_idx += 1
+    return bytes(encoded)
+
+
+def _decode_serial_audio_payload(payload: bytes) -> bytes:
+    """
+    Expand wired G.711 mu-law/8kHz payloads back to PCM16LE/16kHz.
+
+    The server keeps the rest of the STT path at 16kHz, so each decoded sample
+    is duplicated once after mu-law expansion.
+    """
+    if not payload:
+        return b""
+
+    decoded = bytearray(len(payload) * 4)
+    offset = 0
+    for value in payload:
+        sample = _mulaw_to_linear16(value)
+        struct.pack_into("<hh", decoded, offset, sample, sample)
+        offset += 4
+    return bytes(decoded)
+
+
+def recv_exact(
+    conn: socket.socket,
+    n: int,
+    max_timeouts: int = 120,
+    log_timeout_warning: bool = True,
+) -> Optional[bytes]:
     """
     정확히 n바이트를 수신하는 함수
     - 타임아웃 발생 시 재시도하며, 최대 횟수 초과 시 None 반환
@@ -39,7 +141,8 @@ def recv_exact(conn: socket.socket, n: int, max_timeouts: int = 120) -> Optional
             # 타임아웃 발생 시 카운터 증가 및 재시도
             timeout_count += 1
             if timeout_count >= max_timeouts:
-                log.warning("recv_exact timeout - connection may be dead")
+                if log_timeout_warning:
+                    log.warning("recv_exact timeout - connection may be dead")
                 return None
             continue
         except (ConnectionResetError, ConnectionAbortedError, OSError) as exc:
@@ -53,12 +156,92 @@ def recv_exact(conn: socket.socket, n: int, max_timeouts: int = 120) -> Optional
     return buf
 
 
+def _is_valid_incoming_packet_header(ptype: int, plen: int, serial_like: bool = False) -> bool:
+    if ptype in _ZERO_PAYLOAD_PACKET_TYPES:
+        return plen == 0
+
+    if ptype == PTYPE_AUDIO:
+        if serial_like:
+            return 0 < plen <= _MAX_INCOMING_AUDIO_PAYLOAD
+        return 0 < plen <= _MAX_INCOMING_AUDIO_PAYLOAD and plen % 2 == 0
+
+    if ptype == PTYPE_BUFFER_STATUS:
+        return 0 < plen <= _MAX_INCOMING_BUFFER_STATUS_PAYLOAD
+
+    return False
+
+
+def recv_packet(
+    conn: socket.socket,
+    header_timeouts: int = 120,
+    payload_timeouts: int = 4,
+) -> Optional[tuple[int, bytes]]:
+    """
+    Read one ESP32 -> server packet and resync when serial noise corrupts framing.
+
+    Wired USB devices can emit boot chatter when the host opens the port, so the
+    first few bytes are not always a valid protocol frame. We slide over invalid
+    headers until we find a plausible packet boundary, then read the payload.
+    """
+    header = bytearray()
+    skipped_bytes = 0
+    serial_like = _is_serial_like_connection(conn)
+
+    while True:
+        chunk = recv_exact(conn, 1, max_timeouts=header_timeouts)
+        if chunk is None:
+            return None
+
+        header.extend(chunk)
+        if len(header) < 3:
+            continue
+        if len(header) > 3:
+            del header[:-3]
+
+        ptype = header[0]
+        plen = int.from_bytes(header[1:3], "little")
+        if not _is_valid_incoming_packet_header(ptype, plen, serial_like=serial_like):
+            skipped_bytes += 1
+            del header[0]
+            continue
+
+        if skipped_bytes:
+            log.warning(
+                "Skipped %d out-of-sync byte(s) before packet resync",
+                skipped_bytes,
+            )
+            skipped_bytes = 0
+
+        if plen == 0:
+            return ptype, b""
+
+        payload = recv_exact(
+            conn,
+            plen,
+            max_timeouts=payload_timeouts,
+            log_timeout_warning=False,
+        )
+        if payload is None:
+            log.warning(
+                "Dropping incomplete packet while resyncing stream: ptype=0x%02X plen=%d",
+                ptype,
+                plen,
+            )
+            header.clear()
+            continue
+
+        if serial_like and ptype == PTYPE_AUDIO:
+            payload = _decode_serial_audio_payload(payload)
+
+        return ptype, payload
+
+
 def send_packet(
     conn: socket.socket,
     ptype: int,
     payload: Optional[bytes] = b"",
     lock=None,
-    audio_chunk: int = 4096,
+    audio_chunk: int = 2048,
     audio_sleep_s: float = 0.0,
     audio_sample_rate: int = 16000,
     audio_bytes_per_sample: int = 2,
@@ -85,16 +268,17 @@ def send_packet(
             # 오디오 출력 데이터의 경우 특별 처리
             if ptype == PTYPE_AUDIO_OUT:
                 bytes_per_second = max(1.0, float(audio_sample_rate * audio_bytes_per_sample))
+                sample_bytes = max(1, int(audio_bytes_per_sample))
                 send_t0 = time.perf_counter()
                 sent_audio_bytes = 0
                 while offset < total:
                     remaining = total - offset
-                    if remaining < 2:  # 16비트 샘플 최소 크기 체크
+                    if remaining < sample_bytes:
                         break
                     chunk_size = min(remaining, audio_chunk)
-                    # 샘플 경계 유지 (16비트 = 2바이트)
-                    if chunk_size % 2 != 0:
-                        chunk_size -= 1
+                    chunk_size -= chunk_size % sample_bytes
+                    if chunk_size <= 0:
+                        break
                     chunk = payload[offset : offset + chunk_size]
                     header = struct.pack("<BH", ptype & 0xFF, len(chunk))
                     conn.sendall(header + chunk)
@@ -149,7 +333,7 @@ def send_audio(
     conn: socket.socket,
     pcm_bytes: bytes,
     lock=None,
-    audio_chunk: int = 4096,
+    audio_chunk: int = 2048,
     audio_sleep_s: float = 0.0,
     audio_sample_rate: int = 16000,
     audio_bytes_per_sample: int = 2,
@@ -160,10 +344,18 @@ def send_audio(
     - PCM 바이트 데이터를 AUDIO_OUT 패킷으로 전송
     - audio_chunk/audio_sleep_s로 스트리밍 전송 속도 제어
     """
+    payload = pcm_bytes
+    serial_like = _is_serial_like_connection(conn)
+    if serial_like:
+        payload = _encode_serial_audio_payload(pcm_bytes)
+        audio_chunk = min(audio_chunk, WIRED_TTS_AUDIO_CHUNK)
+        audio_sample_rate = WIRED_TTS_SAMPLE_RATE
+        audio_bytes_per_sample = WIRED_TTS_BYTES_PER_SAMPLE
+
     ok = send_packet(
         conn,
         PTYPE_AUDIO_OUT,
-        pcm_bytes,
+        payload,
         lock=lock,
         audio_chunk=audio_chunk,
         audio_sleep_s=audio_sleep_s,
@@ -172,7 +364,14 @@ def send_audio(
         audio_max_ahead_s=audio_max_ahead_s,
     )
     if ok:
-        log.info("AUDIO to ESP32: %s bytes", len(pcm_bytes))
+        if serial_like:
+            log.info(
+                "AUDIO to ESP32: %s bytes (wired mu-law@8kHz from %s-byte PCM16)",
+                len(payload),
+                len(pcm_bytes),
+            )
+        else:
+            log.info("AUDIO to ESP32: %s bytes", len(payload))
     return ok
 
 

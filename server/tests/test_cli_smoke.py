@@ -91,3 +91,15 @@ def test_upsert_update_existing(tmp_path):
 def test_cmd_start_missing_server(monkeypatch, tmp_path):
     monkeypatch.setattr("ccoli.cli._repo_root", lambda: tmp_path)
     assert _cmd_start(None) == 1
+
+
+def test_cmd_start_returns_130_on_keyboard_interrupt(monkeypatch, tmp_path):
+    server_dir = tmp_path / "server"
+    server_dir.mkdir()
+    server_entry = server_dir / "server.py"
+    server_entry.write_text("print('ok')\n", encoding="utf-8")
+
+    monkeypatch.setattr("ccoli.cli._repo_root", lambda: tmp_path)
+    monkeypatch.setattr("ccoli.cli.subprocess.run", lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt()))
+
+    assert _cmd_start(None) == 130

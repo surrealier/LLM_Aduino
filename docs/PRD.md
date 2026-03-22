@@ -55,6 +55,7 @@
 - Agent mode: 사용 가능
 - Robot mode: 개발 중(기능 플래그 기반)
 - CLI 제공:
+  - `ccoli setup`
   - `ccoli start`
   - `ccoli config wifi ...`
   - `ccoli config llm ...`
@@ -78,7 +79,10 @@
 ## 5. 기능 요구사항 (Future Requirements)
 
 ## 5.1 기능 트랙 A — 연결/설정 UX
+- 설치 시 AI 경로(Ollama local / Cloud API / later)를 선택하는 대화형 setup wizard 제공
+- 선택한 경로에 따라 필요한 Python runtime dependency만 설치하는 경량 install profile 제공
 - Wi-Fi/유선 연결 모드 명시적 지원
+- USB 직결 시 별도 Wi-Fi 설정 없이 자동 인식되는 no-config wired 경로 제공
 - CLI에서 연결 모드 선택/검증 UX 제공
 - 서버 설정과 펌웨어 설정 키 동기화 보장
 

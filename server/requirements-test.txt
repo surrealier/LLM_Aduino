@@ -3,5 +3,6 @@ PyYAML>=6.0
 requests>=2.31.0
 feedparser>=6.0.10
 python-dotenv>=1.0.0
+pyserial>=3.5
 pytest>=7.0.0
 faster-whisper>=0.10.0

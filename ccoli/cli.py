@@ -836,6 +836,8 @@ def _cmd_start(port: Optional[int]) -> int:
     command = [sys.executable, str(server_entry)]
     try:
         completed = subprocess.run(command, cwd=str(server_dir), env=env, check=False)
+    except KeyboardInterrupt:
+        return 130
     except FileNotFoundError:
         print("error: python executable is not available", file=sys.stderr)
         return 1

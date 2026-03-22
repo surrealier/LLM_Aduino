@@ -16,27 +16,62 @@
 #include "led_control.h"
 #include "protocol.h"
 #include <M5Unified.h>
+#include <string.h>
 
 // WiFi 자격증명 캐시 (재연결 시 WiFi.begin()에 전달)
 static const char* s_ssid = nullptr;
 static const char* s_pass = nullptr;
+
+bool connection_is_wired_mode() {
+  return CONNECTION_MODE && strcmp(CONNECTION_MODE, "wired") == 0;
+}
+
+bool connection_debug_logging_enabled() {
+  return !connection_is_wired_mode();
+}
+
+uint32_t connection_ping_interval_ms() {
+  return connection_is_wired_mode() ? WIRED_PING_INTERVAL_MS : PING_INTERVAL_MS;
+}
+
+Stream& connection_stream(WiFiClient& client) {
+  if (connection_is_wired_mode()) return Serial;
+  return client;
+}
 
 // connection_init — WiFi STA 모드 설정 및 첫 연결 시도
 void connection_init(ConnectionState* state, const char* ssid, const char* pass) {
   state->last_connect_attempt = 0;
   state->wifi_connected = false;
   state->server_connected = false;
+  state->wired_mode = connection_is_wired_mode();
   s_ssid = ssid;
   s_pass = pass;
 
+  if (state->wired_mode) {
+    return;
+  }
+
   WiFi.mode(WIFI_STA);          // Station 모드 (AP가 아닌 클라이언트)
   WiFi.begin(ssid, pass);       // 비동기 연결 시작
-  led_set_color(LED_COLOR_CONNECTING_R, LED_COLOR_CONNECTING_G, LED_COLOR_CONNECTING_B);
+  led_show_connecting();
 }
 
 // connection_manage — 매 loop()에서 호출하여 연결 상태 관리
 // 처리 순서: WiFi 확인 → WiFi 재연결 → 서버 확인 → 서버 재연결
 void connection_manage(ConnectionState* state, WiFiClient& client) {
+  if (connection_is_wired_mode()) {
+    state->wired_mode = true;
+    state->wifi_connected = true;
+    state->server_connected = protocol_peer_is_alive();
+    if (state->server_connected) {
+      led_show_connected();
+    } else {
+      led_show_connecting();
+    }
+    return;
+  }
+
   unsigned long now = millis();
 
   // ── 1단계: WiFi AP 연결 확인 ──
@@ -52,7 +87,7 @@ void connection_manage(ConnectionState* state, WiFiClient& client) {
       delay(50);                 // 안정화 대기
       WiFi.begin(s_ssid, s_pass);
       state->last_connect_attempt = now;
-      led_set_color(LED_COLOR_CONNECTING_R, LED_COLOR_CONNECTING_G, LED_COLOR_CONNECTING_B);
+      led_show_connecting();
     }
     return;  // WiFi 미연결 시 서버 연결 시도하지 않음
   }
@@ -78,9 +113,9 @@ void connection_manage(ConnectionState* state, WiFiClient& client) {
         state->server_connected = true;
         protocol_init();           // 수신 상태머신 리셋 (잔여 데이터 무효화)
         M5.Speaker.stop();         // 이전 재생 중단
-        led_set_color(LED_COLOR_IDLE_R, LED_COLOR_IDLE_G, LED_COLOR_IDLE_B);
+        led_show_connected();
       } else {
-        led_set_color(LED_COLOR_CONNECTING_R, LED_COLOR_CONNECTING_G, LED_COLOR_CONNECTING_B);
+        led_show_connecting();
       }
       state->last_connect_attempt = now;
     }
@@ -90,4 +125,8 @@ void connection_manage(ConnectionState* state, WiFiClient& client) {
 // connection_is_server_connected — 서버 연결 상태 조회
 bool connection_is_server_connected(const ConnectionState* state) {
   return state->server_connected;
+}
+
+bool connection_transport_ready(const ConnectionState* state) {
+  return state->wired_mode || state->server_connected;
 }

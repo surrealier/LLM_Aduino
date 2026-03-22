@@ -19,6 +19,7 @@ enum ServoAction {
 
 void servo_init();
 void servo_set_angle(int servo_idx, int angle);
+void servo_set_angle(int angle);
 void servo_play_action(ServoAction action);
 void servo_stop();
 void servo_update();

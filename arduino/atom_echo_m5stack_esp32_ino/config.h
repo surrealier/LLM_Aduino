@@ -1,6 +1,7 @@
 // Shared firmware configuration for ccoli.
-// Credential values (SSID/PASS/SERVER_IP/SERVER_PORT) are defined in
-// `device_secrets.h` and declared here as extern symbols.
+// Credential values (CONNECTION_MODE/SSID/PASS/SERVER_IP/SERVER_PORT) come
+// from `device_secrets.h` when present, otherwise the sketch falls back to
+// default wired-mode values.
 
 #ifndef CONFIG_H
 #define CONFIG_H
@@ -8,16 +9,25 @@
 #include <stdint.h>
 
 // Credentials / server target from device_secrets.h
+extern const char* CONNECTION_MODE;
 extern const char* SSID;
 extern const char* PASS;
 extern const char* SERVER_IP;
 extern const uint16_t SERVER_PORT;
 
+// USB serial transport defaults
+// Keep wired USB at 115200 for CP210x stability; wired audio is transcoded to fit.
+#define SERIAL_BAUD_RATE 115200
+#define WIRED_PING_INTERVAL_MS 1000
+#define PROTOCOL_PEER_TIMEOUT_MS 5000
+#define WIRED_TTS_SAMPLE_RATE 8000
+
 // ── Pin assignments (Atom Echo) ──
 // Predefined (DO NOT REUSE): G19, G22 (I2S SPK), G23, G33 (PDM MIC)
 // Internal: G27 (RGB LED), G39 (Button), G12 (IR TX)
 
-// OLED Display (SSD1306 I2C) — right-side header pins
+// Optional OLED Display (SSD1306 I2C) — right-side header pins
+// Firmware should still compile without the Adafruit SSD1306 library installed.
 #define DISPLAY_SDA_PIN 25
 #define DISPLAY_SCL_PIN 21
 #define DISPLAY_WIDTH   128
@@ -47,25 +57,21 @@ extern const uint16_t SERVER_PORT;
 #define AUDIO_SAMPLE_RATE 16000
 #define AUDIO_FRAME_SIZE 320
 #define PREROLL_MS 200
-#define AUDIO_RING_BUFFER_SIZE 81920
+#define AUDIO_RING_BUFFER_SIZE 16384
 #define ENABLE_BUTTON_INTERRUPT 1
 
 // Connection settings
 #define WIFI_RECONNECT_INTERVAL_MS 5000
 #define PING_INTERVAL_MS 3000
-// WiFi 연결 타임아웃: 이 시간 안에 WiFi가 안 붙으면 USB Serial로 전환
-#define WIFI_CONNECT_TIMEOUT_MS 12000
-// USB Serial 데이터 전송 속도 (USB CDC는 실제 속도가 USB에 의해 결정되나 명시적 설정 필요)
-#define SERIAL_BAUD_RATE 921600
 
 // LED colors (RGB)
 #define LED_COLOR_CONNECTING_R 255
 #define LED_COLOR_CONNECTING_G 0
 #define LED_COLOR_CONNECTING_B 0
 
-#define LED_COLOR_IDLE_R 0
-#define LED_COLOR_IDLE_G 0
-#define LED_COLOR_IDLE_B 255
+#define LED_COLOR_IDLE_R 100
+#define LED_COLOR_IDLE_G 255
+#define LED_COLOR_IDLE_B 100
 
 #define LED_COLOR_RECORDING_R 0
 #define LED_COLOR_RECORDING_G 255

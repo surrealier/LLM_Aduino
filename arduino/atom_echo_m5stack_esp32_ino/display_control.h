@@ -1,8 +1,6 @@
 #ifndef DISPLAY_CONTROL_H
 #define DISPLAY_CONTROL_H
 
-#include <Adafruit_SSD1306.h>
-
 enum FaceType {
   FACE_NEUTRAL,
   FACE_HAPPY,
