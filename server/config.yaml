@@ -3,7 +3,7 @@ server:
   port: 5001
 stt:
   model_size: medium
-  device: cpu
+  device: cuda
   language: ko
 llm:
   provider: gemini

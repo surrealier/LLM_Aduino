@@ -119,7 +119,7 @@ def test_send_connection_greeting_sends_audio_once():
         def text_to_audio(self, text, trim_pad_ms=140.0):
             self.tts_calls += 1
             assert "콜리 연결됐어요!" in text
-            assert trim_pad_ms == 90.0
+            assert trim_pad_ms == srv.CONNECTION_GREETING_TTS_PAD_MS
             return b"\x00\x01" * 32
 
     state = {"connection_greeting_sent": False}
@@ -263,7 +263,7 @@ def test_build_tts_audio_payloads_merges_multiple_chunks():
     payloads = srv._build_tts_audio_payloads(_FakeAgent(), "응답 본문", max_chunks=3)
 
     assert payloads == [b"merged-audio"]
-    assert calls == [("첫 번째 문장", 80.0), ("두 번째 문장", 80.0)]
+    assert calls == [("첫 번째 문장", srv.TTS_CHUNK_EDGE_PAD_MS), ("두 번째 문장", srv.TTS_CHUNK_EDGE_PAD_MS)]
 
 
 def test_build_tts_audio_payloads_retries_single_pass_after_chunk_failure():
@@ -290,7 +290,7 @@ def test_build_tts_audio_payloads_retries_single_pass_after_chunk_failure():
     payloads = srv._build_tts_audio_payloads(_FakeAgent(), "응답 본문", max_chunks=3)
 
     assert payloads == [b"fallback"]
-    assert calls == [("앞부분", 80.0), ("뒷부분", 80.0), ("앞부분 뒷부분", 90.0)]
+    assert calls == [("앞부분", srv.TTS_CHUNK_EDGE_PAD_MS), ("뒷부분", srv.TTS_CHUNK_EDGE_PAD_MS), ("앞부분 뒷부분", srv.TTS_FALLBACK_PAD_MS)]
 
 
 def test_warm_up_runtime_assets_loads_stt_and_tts():

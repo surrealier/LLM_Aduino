@@ -75,6 +75,8 @@ class AgentMode:
         proactive_enabled=True,
         proactive_interval=1800,
         tts_voice=None,
+        memory_dir=None,
+        memory_refresh_interval=5,
     ):
         self.llm = llm_client
         self.tts_voice = tts_voice or "ko-KR-SunHiNeural"
@@ -86,7 +88,11 @@ class AgentMode:
         self.conversation_count = 0
 
         # 메모리 매니저 (md 파일 기반)
-        self.memory = MemoryManager(llm_client)
+        self.memory = MemoryManager(
+            llm_client,
+            memory_dir=memory_dir,
+            refresh_interval=memory_refresh_interval,
+        )
 
         # 서브시스템 초기화
         self.emotion_system = EmotionSystem()
@@ -373,6 +379,27 @@ class AgentMode:
             log.warning("Connection greeting generation failed: %s", exc)
             return fallback
 
+    def _llm_failure_response(self) -> str:
+        if not self.llm:
+            return ""
+
+        provider = (getattr(self.llm, "provider", "") or "llm").lower()
+        error_code = getattr(self.llm, "last_error_code", None)
+        provider_label = {
+            "gemini": "Gemini",
+            "claude": "Claude",
+            "chatgpt": "ChatGPT",
+            "ollama": "Ollama",
+        }.get(provider, "LLM")
+
+        if error_code == "missing_api_key":
+            return f"지금 {provider_label} API 키가 없어서 답변을 만들 수 없어요. 설정을 확인해 주세요."
+
+        if error_code in {"provider_error", "unsupported_provider"}:
+            return "지금 답변 엔진 연결이 불안정해서 응답을 만들지 못했어요. 잠시 후 다시 말씀해 주세요."
+
+        return ""
+
     def generate_response(self, text: str, is_proactive: bool = False, speaker_id: str | None = None) -> tuple[str, str]:
         """응답 생성. Returns (response_text, intent)."""
         if not self.llm:
@@ -419,10 +446,15 @@ class AgentMode:
                 messages.append({"role": conv["role"], "content": conv["content"]})
 
             raw = self.llm.chat(messages, temperature=0.8, max_tokens=256)
-            intent, clean_text = parse_intent(raw)
-            response = self._sanitize_response(clean_text)
+            if raw.strip():
+                intent, clean_text = parse_intent(raw)
+                response = self._sanitize_response(clean_text)
+            else:
+                intent = "none"
+                response = self._llm_failure_response()
+
             if not response:
-                response = "음, 잘 못 알아들었어요. 다시 한번 말씀해주시겠어요?"
+                response = "잘 이해하지 못했어요. 한 번만 다시 말씀해 주세요."
 
             # sleep 의도 처리
             if intent == "sleep":
@@ -511,7 +543,7 @@ class AgentMode:
         communicate = edge_tts.Communicate(text, self.tts_voice)
         await communicate.save(output_file)
 
-    def text_to_audio(self, text: str, trim_pad_ms: float = 140.0):
+    def text_to_audio(self, text: str, trim_pad_ms: float = 180.0):
         """텍스트를 오디오로 변환 - TTS 생성 및 오디오 후처리"""
         tmp_mp3 = None
         try:
@@ -580,7 +612,7 @@ class AgentMode:
                 pcm_f32 = trim_energy(
                     pcm_f32,
                     sr=sr,
-                    top_db=35.0,
+                    top_db=45.0,
                     pad_ms=max(0.0, float(trim_pad_ms)),
                 )
 
@@ -591,7 +623,7 @@ class AgentMode:
                     pcm_f32 = (pcm_f32 / peak * 0.90).astype(np.float32, copy=False)
 
             # 청크 경계 클릭 노이즈 완화용 짧은 페이드 인/아웃
-            fade_len = int(sr * 0.008)
+            fade_len = int(sr * 0.004)
             if pcm_f32.size > 2 and fade_len > 0:
                 fade_len = min(fade_len, pcm_f32.size // 2)
                 if fade_len > 0:

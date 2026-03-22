@@ -1,657 +1,93 @@
-<!DOCTYPE html>
-<html lang="ko" class="dark">
+﻿<!DOCTYPE html>
+<html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ccoli dashboard</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script>tailwind.config = { darkMode: 'class' }</script>
 <style>
-  body { font-family: 'Courier New', monospace; }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
-  .tab-btn.active { border-bottom: 2px solid #60a5fa; color: #60a5fa; }
-  .log-ERROR { color: #f87171; }
-  .log-WARNING { color: #fbbf24; }
-  .log-INFO { color: #86efac; }
-  .log-DEBUG { color: #94a3b8; }
-  textarea { resize: vertical; }
-  .emotion-happy { background: #fef08a; color: #713f12; }
-  .emotion-excited { background: #f9a8d4; color: #831843; }
-  .emotion-sad { background: #93c5fd; color: #1e3a5f; }
-  .emotion-angry { background: #fca5a5; color: #7f1d1d; }
-  .emotion-sleepy { background: #c4b5fd; color: #2e1065; }
-  .emotion-neutral { background: #86efac; color: #14532d; }
-  .ws-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  .ws-dot.connected { background: #4ade80; }
-  .ws-dot.disconnected { background: #f87171; }
+:root{--glass:rgba(255,255,255,.66);--stroke:rgba(255,255,255,.8);--shadow:0 22px 60px rgba(18,67,31,.12);--shadow2:0 10px 28px rgba(18,67,31,.08);--g900:#155f24;--g700:#3f8e41;--mint:#dff4cb;--teal:#2daba3;--text:#163425;--soft:#5a7463;--danger:#b85047;--r:28px;--rs:18px;font-family:"SF Pro Display","Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--text);background:radial-gradient(circle at top left,rgba(121,200,107,.28),transparent 32%),radial-gradient(circle at 88% 10%,rgba(45,171,163,.18),transparent 22%),linear-gradient(180deg,#f9fcf6 0%,#f1f8ef 48%,#fbfcfa 100%);letter-spacing:-.01em}button,input,textarea,select{font:inherit;color:inherit}img{max-width:100%;display:block}p,h1,h2,h3{margin:0}.glass{background:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.56));border:1px solid var(--stroke);box-shadow:var(--shadow);backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%)}.app{width:min(calc(100% - 28px),1620px);margin:0 auto;padding:20px 0 28px;display:grid;grid-template-columns:minmax(280px,330px) minmax(0,1fr);gap:22px}.side,.panel,.card,.hero,.metric{border-radius:var(--r);border:1px solid rgba(255,255,255,.84);box-shadow:var(--shadow2);background:linear-gradient(180deg,rgba(255,255,255,.76),rgba(255,255,255,.58))}.side{position:sticky;top:20px;height:calc(100vh - 40px);padding:20px;display:grid;gap:16px;overflow:auto}.banner{overflow:hidden;border-radius:22px}.banner img{aspect-ratio:1.7/1;object-fit:cover}.brand{display:grid;grid-template-columns:92px 1fr;gap:14px;padding:14px;border-radius:22px;background:linear-gradient(145deg,rgba(255,255,255,.7),rgba(223,244,203,.58));border:1px solid rgba(255,255,255,.86)}.brand img{width:92px;height:92px;object-fit:cover;border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.84),rgba(223,244,203,.82));padding:8px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--g700);margin-bottom:6px}h1,h2,h3{letter-spacing:-.03em;line-height:1.12}.muted,.meta,.hint{color:var(--soft)}.nav{display:grid;gap:10px}.nav button{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:13px 16px;border-radius:18px;border:1px solid rgba(255,255,255,.82);background:rgba(255,255,255,.44);cursor:pointer}.nav button.active,.nav button:hover{background:linear-gradient(135deg,rgba(255,255,255,.86),rgba(223,244,203,.74))}.status{display:grid;gap:12px;padding:16px;border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.76),rgba(245,251,243,.58))}.row,.actions,.chips,.head{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.row,.head{justify-content:space-between}.dot{width:10px;height:10px;border-radius:50%;background:#b8c6bc;box-shadow:0 0 0 6px rgba(184,198,188,.18)}.dot.live{background:var(--g700);box-shadow:0 0 0 8px rgba(63,142,65,.16)}.pill,.badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.9);font-size:13px;font-weight:700}.badge{color:var(--g900);background:linear-gradient(135deg,rgba(223,244,203,.8),rgba(255,255,255,.86))}.main{display:grid;gap:20px;min-width:0}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:22px 24px;border-radius:30px}.top h2{font-size:clamp(28px,4vw,42px);max-width:14ch}.btn{appearance:none;border:0;border-radius:999px;padding:11px 16px;cursor:pointer;color:var(--text);background:rgba(255,255,255,.82);border:1px solid rgba(255,255,255,.92);box-shadow:var(--shadow2)}.btn.primary{color:#fff;background:linear-gradient(135deg,var(--g900),var(--g700))}.btn.secondary{background:linear-gradient(135deg,rgba(255,255,255,.86),rgba(223,244,203,.74))}.btn.ghost{background:rgba(255,255,255,.4);box-shadow:none}.btn.danger{color:#fff;background:linear-gradient(135deg,#d56b62,var(--danger))}.btn.small{padding:8px 12px;font-size:13px}.tab{display:none;gap:18px}.tab.active{display:grid}.hero-grid,.metrics,.overview{display:grid;gap:18px}.hero-grid{grid-template-columns:minmax(0,1.5fr) minmax(280px,.95fr)}.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(240px,.9fr);gap:18px;padding:24px}.hero h3{font-size:clamp(30px,5vw,46px);max-width:10ch}.hero-copy{display:grid;gap:18px;align-content:space-between}.visual{position:relative;min-height:280px;border-radius:28px;overflow:hidden;padding:18px;border:1px solid rgba(255,255,255,.88);background:radial-gradient(circle at 32% 24%,rgba(255,255,255,.98),rgba(255,255,255,.54) 42%,rgba(121,200,107,.14) 100%),linear-gradient(180deg,rgba(223,244,203,.7),rgba(255,255,255,.72));display:flex;align-items:flex-end;justify-content:center}.visual img{width:min(100%,360px);object-fit:contain;filter:drop-shadow(0 20px 30px rgba(21,95,36,.12))}.note{position:absolute;top:16px;right:16px;max-width:220px;padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.82);border:1px solid rgba(255,255,255,.92)}.metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.metric,.panel,.card{padding:18px}.value{font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.04em}.overview{grid-template-columns:1.08fr 1fr 1fr}.stack,.list{display:grid;gap:12px}.item{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.88);box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}@media(max-width:1320px){.metrics,.overview,.hero-grid,.hero{grid-template-columns:1fr}}@media(max-width:1120px){.app{grid-template-columns:1fr}.side{position:static;height:auto}.nav{grid-template-columns:repeat(7,minmax(152px,1fr));overflow:auto;padding-bottom:4px}.nav button{min-width:152px}}@media(max-width:720px){.app{width:min(calc(100% - 18px),1620px);padding-top:10px}.side,.top,.hero,.panel,.card,.metric{padding:16px}.top,.brand{grid-template-columns:1fr}}
 </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
-
-<!-- Header -->
-<header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
-  <div class="flex items-center gap-3">
-    <span class="text-blue-400 font-bold text-lg">ccoli</span>
-    <span class="text-gray-500 text-sm">dashboard</span>
+<body>
+<div class="app">
+  <aside class="side glass">
+    <div class="stack"><div class="banner"><img src="/brand-docs/ccoli-logo.png" alt="ccoli brand banner"></div><div class="brand"><img src="/brand-assets/ccoli.png" alt="ccoli mascot"><div><p class="eyebrow">CColi Dashboard</p><h1>콜리 컨트롤 센터</h1><p class="muted">브랜드 초록, 민트, 아쿠아 포인트를 중심으로 애플식 여백과 글래스모피즘으로 재정리했습니다.</p></div></div></div>
+    <nav class="nav" id="nav"><button class="active" data-tab="overview" type="button"><strong>개요</strong><small>라이브 상태</small></button><button data-tab="memory" type="button"><strong>메모리</strong><small>기억 관리</small></button><button data-tab="conversation" type="button"><strong>대화</strong><small>히스토리</small></button><button data-tab="schedules" type="button"><strong>일정</strong><small>리마인더</small></button><button data-tab="chat" type="button"><strong>채팅</strong><small>웹 대화</small></button><button data-tab="settings" type="button"><strong>설정</strong><small>구성/연동</small></button><button data-tab="logs" type="button"><strong>로그</strong><small>실시간 스트림</small></button></nav>
+    <div class="status"><div class="row"><div class="row"><span class="dot" id="ws-dot"></span><span id="ws-label">실시간 연결 대기 중</span></div><span class="badge" id="mode-badge">mode · agent</span></div><div class="chips"><span class="pill" id="emotion-pill">emotion · neutral</span><span class="pill" id="conversation-pill">대화 0회</span></div><div class="chips"><span class="pill"><strong id="timer-count">0</strong> 타이머</span><span class="pill"><strong id="alarm-count">0</strong> 알람</span><span class="pill"><strong id="proactive-state">대기</strong> proactive</span></div></div>
+    <div class="status"><div class="item"><strong id="summary-emotion-title">차분하게 대기 중</strong><p class="meta" id="summary-emotion-meta">콜리의 현재 감정이 여기에 표시됩니다.</p></div><div class="item"><strong id="summary-proactive-title">최근 상호작용 없음</strong><p class="meta" id="summary-proactive-meta">최근 활동 시간이 갱신되면 여기에 표시됩니다.</p></div></div>
+  </aside>
+  <main class="main">
+    <header class="top glass"><div><p class="eyebrow">Apple-Inspired Glassmorphism</p><h2>콜리의 상태, 기억, 대화를 맑고 조용한 흐름으로 관리합니다.</h2><p class="muted">배경보다 여백, 장식보다 깊이, 기능보다 흐름을 먼저 놓고 다시 구성했습니다.</p></div><div class="actions"><button class="btn secondary" id="connect-ws" type="button">실시간 다시 연결</button><button class="btn primary" id="refresh-all" type="button">전체 새로고침</button></div></header>
+    <section class="tab active" id="tab-overview">
+      <div class="hero-grid"><article class="hero"><div class="hero-copy"><div><p class="eyebrow">Live Overview</p><h3 id="hero-headline">콜리는 지금 차분하게 다음 대화를 기다리고 있습니다.</h3><p id="hero-description">브랜드 톤과 실시간 상태를 한 화면에서 자연스럽게 연결했습니다.</p></div><div class="actions"><button class="btn secondary" type="button" data-tab-target="chat">바로 채팅하기</button><button class="btn ghost" type="button" data-tab-target="memory" data-memory-file="Soul.md">Soul 열기</button></div></div><div class="visual"><div class="note" id="hero-note">최근 상태를 불러오는 중입니다.</div><img src="/brand-assets/ccoli.png" alt="ccoli mascot card"></div></article><article class="panel"><div class="head"><div><p class="eyebrow">Brand Language</p><h3>브랜드 배너의 초록, 민트, 아쿠아 포인트를 그대로 가져왔습니다.</h3></div></div><img src="/brand-docs/ccoli-logo.png" alt="ccoli logo artwork" style="border-radius:22px;min-height:240px;object-fit:cover;border:1px solid rgba(255,255,255,.9);"><p class="muted">둥근 실루엣과 차분한 광택을 라운드, 강조선, 상태색에 반영했습니다.</p></article></div>
+      <div class="metrics"><article class="metric"><div><p class="eyebrow">Current Emotion</p><div class="value" id="metric-emotion">neutral</div></div><div class="row"><span>현재 감정</span><span class="meta" id="metric-emotion-sub">최근 기록 없음</span></div></article><article class="metric"><div><p class="eyebrow">Mode</p><div class="value" id="metric-mode">agent</div></div><div class="row"><span>운영 모드</span><span class="meta" id="metric-mode-sub">대화 중심</span></div></article><article class="metric"><div><p class="eyebrow">Conversation</p><div class="value" id="metric-conversation">0</div></div><div class="row"><span>누적 턴 수</span><span class="meta" id="metric-conversation-sub">기록 대기</span></div></article><article class="metric"><div><p class="eyebrow">Proactive</p><div class="value" id="metric-proactive">대기</div></div><div class="row"><span>선제 상호작용</span><span class="meta" id="metric-proactive-sub">최근 활동 없음</span></div></article></div>
+      <div class="overview"><article class="panel"><div class="head"><div><h3>다가오는 일정</h3><p class="hint">오늘과 앞으로의 리마인더</p></div><button class="btn small ghost" data-tab-target="schedules" type="button">일정 보기</button></div><div class="list" id="overview-schedules"></div></article><article class="panel"><div class="head"><div><h3>최근 대화</h3><p class="hint">마지막 대화 흐름</p></div><button class="btn small ghost" data-tab-target="conversation" type="button">대화 보기</button></div><div class="list" id="overview-conversation"></div></article><article class="panel"><div class="head"><div><h3>라이브 로그</h3><p class="hint">웹소켓 최신 이벤트</p></div><button class="btn small ghost" data-tab-target="logs" type="button">로그 보기</button></div><div class="list" id="overview-logs"></div></article></div>
+    </section>
+      <style>
+      .stack,.list,.feed,.editor{display:grid;gap:12px}.mem,.conv,.sched,.integ,.bubble,.empty{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.88);box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}.memory-grid,.settings,.chat-grid,.fields{display:grid;gap:18px}.memory-grid{grid-template-columns:minmax(240px,300px) minmax(0,1fr)}.settings{grid-template-columns:repeat(2,minmax(0,1fr))}.chat-grid{grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);align-items:start}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.field{display:grid;gap:8px}.field label{font-size:14px;font-weight:700}.mem{display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer}.mem.active{background:linear-gradient(135deg,rgba(223,244,203,.82),rgba(255,255,255,.88))}textarea,input[type=text],input[type=password],input[type=number],input[type=datetime-local],select{width:100%;border-radius:16px;border:1px solid rgba(121,200,107,.22);background:rgba(255,255,255,.78);padding:13px 14px;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}textarea:focus,input:focus,select:focus{border-color:rgba(63,142,65,.45);box-shadow:0 0 0 4px rgba(121,200,107,.14)}#memory-editor{min-height:520px;resize:vertical}.conv{display:grid;gap:10px}.conv header{display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:13px;color:var(--soft)}.role{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;font-weight:700;background:rgba(223,244,203,.74);color:var(--g900)}.assistant{background:rgba(45,171,163,.14)!important;color:#1e6762}.system{background:rgba(245,221,170,.3)!important;color:#7f5b18}.feed{max-height:720px;overflow:auto;padding-right:4px}.bubble.assistant-b{background:linear-gradient(135deg,rgba(223,244,203,.8),rgba(255,255,255,.78))}pre{margin:0;padding:18px;border-radius:18px;background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.88);white-space:pre-wrap;word-break:break-word;overflow:auto;font-size:13px;font-family:"SF Mono",Consolas,monospace}#logs-view{min-height:520px;max-height:720px}.empty{text-align:center;color:var(--soft)}.toasts{position:fixed;right:22px;bottom:22px;z-index:30;display:grid;gap:10px;width:min(360px,calc(100vw - 24px))}.toast{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.84);border:1px solid rgba(255,255,255,.92);box-shadow:var(--shadow)}@media(max-width:1320px){.memory-grid,.settings,.chat-grid,.fields{grid-template-columns:1fr}}
+      </style>
+      <section class="tab" id="tab-memory"><article class="panel"><div class="head"><div><p class="eyebrow">Memory Files</p><h3>콜리의 기억을 직접 관리합니다.</h3></div><div class="actions"><button class="btn secondary" id="reload-memory" type="button">현재 파일 다시 읽기</button><button class="btn primary" id="save-memory" type="button">메모리 저장</button></div></div><div class="memory-grid"><div class="card"><div class="head"><div><h3>파일 목록</h3><p class="hint">버튼을 누르면 우측 편집기로 로드됩니다.</p></div></div><div class="list" id="memory-list"></div></div><div class="card"><div class="head"><div><h3 id="memory-title">Soul.md</h3><p class="hint" id="memory-meta">파일을 불러오는 중입니다.</p></div></div><textarea id="memory-editor" spellcheck="false"></textarea></div></div></article></section>
+      <section class="tab" id="tab-conversation"><article class="panel"><div class="head"><div><p class="eyebrow">Conversation History</p><h3>대화 히스토리와 화자별 맥락을 살펴봅니다.</h3></div><div class="actions"><button class="btn secondary" id="conversation-refresh" type="button">새로고침</button><button class="btn danger" id="conversation-clear" type="button">전체 비우기</button></div></div><div class="fields"><div class="field"><label for="speaker-filter">화자 필터</label><select id="speaker-filter"><option value="">전체 대화</option></select></div><div class="field"><label for="conversation-limit">불러올 개수</label><input id="conversation-limit" type="number" min="1" max="500" value="50"></div></div><div class="list" id="conversation-list"></div></article></section>
+      <section class="tab" id="tab-schedules"><article class="panel"><div class="head"><div><p class="eyebrow">Schedules</p><h3>일정과 리마인더를 같은 화면에서 추가하고 관리합니다.</h3></div><button class="btn secondary" id="schedules-refresh" type="button">일정 새로고침</button></div><form class="card editor" id="schedule-form"><div class="fields"><div class="field"><label for="schedule-title">제목</label><input id="schedule-title" type="text" placeholder="예: 월요일 데모 준비" required></div><div class="field"><label for="schedule-datetime">날짜와 시간</label><input id="schedule-datetime" type="datetime-local" required></div><div class="field"><label for="schedule-reminder">미리 알림(분)</label><input id="schedule-reminder" type="number" min="0" step="5" value="10"></div><div class="field"><label for="schedule-description">설명</label><input id="schedule-description" type="text" placeholder="선택 사항"></div></div><div class="actions"><button class="btn primary" type="submit">일정 추가</button><span class="meta">ISO 8601 형식으로 서버에 저장됩니다.</span></div></form><div class="list" id="schedule-list"></div></article></section>
+      <section class="tab" id="tab-chat"><div class="chat-grid"><article class="panel"><div class="head"><div><p class="eyebrow">Web Chat</p><h3>브라우저에서 바로 콜리와 대화합니다.</h3></div></div><div class="feed" id="chat-feed"></div></article><article class="card"><div class="head"><div><h3>메시지 보내기</h3><p class="hint">웹 채팅은 `/api/chat`을 사용합니다.</p></div></div><form id="chat-form" class="editor"><div class="field"><label for="chat-speaker">speaker_id</label><input id="chat-speaker" type="text" value="web_user"></div><div class="field"><label for="chat-input">메시지</label><textarea id="chat-input" style="min-height:220px;" placeholder="콜리에게 보낼 메시지를 입력하세요."></textarea></div><div class="actions"><button class="btn primary" type="submit">보내기</button><button class="btn ghost" id="chat-clear" type="button">채팅창 비우기</button></div></form></article></div></section>
+      <section class="tab" id="tab-settings"><div class="settings"><article class="panel"><div class="head"><div><p class="eyebrow">Auth</p><h3>웹 인증 토큰</h3></div></div><div class="editor"><div class="field"><label for="auth-token">X-Auth-Token</label><input id="auth-token" type="password" placeholder="설정되어 있다면 여기에 입력하세요."></div><div class="actions"><button class="btn primary" id="save-token" type="button">토큰 저장</button><button class="btn ghost" id="clear-token" type="button">토큰 지우기</button></div><p class="meta">브라우저 로컬 스토리지에만 저장됩니다.</p></div></article><article class="panel"><div class="head"><div><p class="eyebrow">Quick Patch</p><h3>config.yaml 값 빠르게 수정</h3></div></div><form id="config-patch-form" class="editor"><div class="fields"><div class="field"><label for="config-section">섹션</label><input id="config-section" type="text" placeholder="예: stt"></div><div class="field"><label for="config-key">키</label><input id="config-key" type="text" placeholder="예: device"></div></div><div class="field"><label for="config-value">값</label><input id="config-value" type="text" placeholder='예: "cuda" 또는 true'></div><div class="actions"><button class="btn primary" type="submit">설정 반영</button><button class="btn secondary" id="config-refresh" type="button">설정 새로고침</button></div></form></article><article class="panel"><div class="head"><div><p class="eyebrow">Config Snapshot</p><h3>현재 서버 설정</h3></div></div><pre id="config-json">설정을 불러오는 중입니다.</pre></article><article class="panel"><div class="head"><div><p class="eyebrow">Integrations</p><h3>외부 연동 상태</h3></div><button class="btn secondary" id="integrations-refresh" type="button">연동 새로고침</button></div><div class="list" id="integration-list"></div></article></div></section>
+      <section class="tab" id="tab-logs"><article class="panel"><div class="head"><div><p class="eyebrow">Logs</p><h3>실시간 로그 스트림</h3></div><div class="actions"><button class="btn secondary" id="logs-refresh" type="button">수동 새로고침</button><button class="btn ghost" id="logs-pause" type="button">일시정지</button></div></div><div class="fields"><div class="field"><label for="log-tail">최근 줄 수</label><input id="log-tail" type="number" min="20" max="500" value="150"></div><div class="field"><label for="log-filter">필터</label><input id="log-filter" type="text" placeholder="예: ERROR, websocket, STT"></div></div><pre id="logs-view">로그를 불러오는 중입니다.</pre></article></section>
+    </main>
   </div>
-  <div class="flex items-center gap-4 text-sm">
-    <span class="ws-dot disconnected" id="ws-dot"></span>
-    <span id="ws-label" class="text-gray-500">disconnected</span>
-    <span id="emotion-pill" class="emotion-neutral px-2 py-0.5 rounded text-xs font-bold">neutral</span>
-    <span id="mode-badge" class="bg-blue-900 text-blue-300 px-2 py-0.5 rounded text-xs">AGENT</span>
-  </div>
-</header>
-
-<!-- Tabs -->
-<nav class="bg-gray-900 border-b border-gray-800 px-6 flex gap-1 text-sm">
-  <button class="tab-btn active px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('overview')">Overview</button>
-  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('memory')">Memory</button>
-  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('conversation')">Conversation</button>
-  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('schedules')">Schedules</button>
-  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('chat')">Chat</button>
-  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('settings')">Settings</button>
-  <button class="tab-btn px-4 py-2 text-gray-300 hover:text-white" onclick="switchTab('logs')">Logs</button>
-</nav>
-
-<!-- Main -->
-<main class="p-6 max-w-6xl mx-auto">
-
-<!-- Overview Tab -->
-<div id="tab-overview" class="tab-content active">
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-      <div class="text-gray-400 text-xs mb-1">MODE</div>
-      <div id="ov-mode" class="text-2xl font-bold text-blue-400">—</div>
-    </div>
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-      <div class="text-gray-400 text-xs mb-1">EMOTION</div>
-      <div id="ov-emotion" class="text-2xl font-bold">—</div>
-    </div>
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-      <div class="text-gray-400 text-xs mb-1">CONVERSATIONS</div>
-      <div id="ov-conv-count" class="text-2xl font-bold text-green-400">—</div>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-      <div class="text-gray-400 text-xs mb-2">PROACTIVE</div>
-      <div id="ov-proactive" class="text-sm text-gray-300 space-y-1"></div>
-    </div>
-    <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-      <div class="text-gray-400 text-xs mb-2">TIMERS &amp; ALARMS</div>
-      <div id="ov-timers" class="text-sm text-gray-300"></div>
-    </div>
-  </div>
-
-  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-    <div class="text-gray-400 text-xs mb-2">RECENT ACTIVITY</div>
-    <div id="ov-activity" class="space-y-2 text-sm"></div>
-  </div>
-</div>
-
-<!-- Memory Tab -->
-<div id="tab-memory" class="tab-content">
-  <div class="flex gap-2 mb-4 flex-wrap">
-    <button class="mem-tab-btn bg-blue-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Soul.md')">Soul</button>
-    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('User.md')">User</button>
-    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Shortterm_Memory.md')">Shortterm</button>
-    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Longterm_Memory.md')">Longterm</button>
-    <button class="mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm" onclick="switchMemTab('Relation.md')">Relation</button>
-  </div>
-  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-    <div class="flex justify-between items-center mb-2">
-      <span id="mem-filename" class="text-blue-400 text-sm font-bold">Soul.md</span>
-      <div class="flex gap-2 items-center">
-        <span id="mem-charcount" class="text-gray-500 text-xs"></span>
-        <button onclick="saveMem()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">Save</button>
-      </div>
-    </div>
-    <textarea id="mem-editor" class="w-full bg-gray-950 text-gray-100 border border-gray-700 rounded p-3 text-sm font-mono"
-      rows="20" oninput="updateCharCount()"></textarea>
-    <div id="mem-msg" class="text-xs mt-1 h-4"></div>
-  </div>
-</div>
-
-<!-- Conversation Tab -->
-<div id="tab-conversation" class="tab-content">
-  <div class="flex gap-3 mb-4 items-center flex-wrap">
-    <select id="conv-speaker" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200" onchange="loadConversation()">
-      <option value="">All</option>
-    </select>
-    <input id="conv-limit" type="number" value="50" min="1" max="500"
-      class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-20 text-gray-200">
-    <button onclick="loadConversation()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm">Refresh</button>
-    <button onclick="clearConversation()" class="bg-red-900 hover:bg-red-800 text-red-200 px-3 py-1 rounded text-sm">Clear</button>
-  </div>
-  <div class="bg-gray-900 rounded-lg border border-gray-800 overflow-auto">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-800 text-gray-400 text-xs">
-        <tr>
-          <th class="px-3 py-2 text-left">Time</th>
-          <th class="px-3 py-2 text-left">Speaker</th>
-          <th class="px-3 py-2 text-left">Role</th>
-          <th class="px-3 py-2 text-left w-full">Message</th>
-        </tr>
-      </thead>
-      <tbody id="conv-table" class="divide-y divide-gray-800"></tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Schedules Tab -->
-<div id="tab-schedules" class="tab-content">
-  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-4">
-    <div class="text-gray-400 text-xs mb-3">ADD SCHEDULE</div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <input id="sch-title" type="text" placeholder="Title" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
-      <input id="sch-dt" type="datetime-local" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
-      <input id="sch-desc" type="text" placeholder="Description (optional)" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
-      <input id="sch-remind" type="number" value="0" min="0" placeholder="Remind before (min)" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200">
-    </div>
-    <div class="flex gap-2 mt-3">
-      <button onclick="addSchedule()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">Add</button>
-      <span id="sch-msg" class="text-xs text-gray-400 self-center"></span>
-    </div>
-  </div>
-  <div id="sch-list" class="space-y-2"></div>
-</div>
-
-<!-- Chat Tab -->
-<div id="tab-chat" class="tab-content flex flex-col" style="height: calc(100vh - 200px);">
-  <div id="chat-messages" class="flex-1 overflow-auto bg-gray-900 rounded-lg border border-gray-800 p-4 space-y-3 mb-3"></div>
-  <div class="flex gap-2">
-    <input id="chat-input" type="text" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter')sendChat()"
-      class="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-sm text-gray-200">
-    <button onclick="sendChat()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded text-sm">Send</button>
-  </div>
-</div>
-
-<!-- Settings Tab -->
-<div id="tab-settings" class="tab-content">
-  <!-- Config -->
-  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-4">
-    <div class="text-gray-400 text-xs mb-3">CONFIGURATION</div>
-    <div id="config-sections" class="space-y-4"></div>
-  </div>
-  <!-- Integrations -->
-  <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
-    <div class="text-gray-400 text-xs mb-3">INTEGRATIONS</div>
-    <div id="integrations-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-  </div>
-</div>
-
-<!-- Logs Tab -->
-<div id="tab-logs" class="tab-content">
-  <div class="flex gap-3 mb-3 items-center flex-wrap text-sm">
-    <select id="log-filter" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-200" onchange="filterLogs()">
-      <option value="ALL">ALL</option>
-      <option value="INFO">INFO</option>
-      <option value="WARNING">WARNING</option>
-      <option value="ERROR">ERROR</option>
-    </select>
-    <button onclick="toggleLogPause()" id="log-pause-btn" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">Pause</button>
-    <button onclick="clearLogs()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">Clear</button>
-    <span class="text-gray-500 text-xs" id="log-count">0 lines</span>
-  </div>
-  <pre id="log-box" class="bg-gray-900 rounded-lg border border-gray-800 p-4 text-xs overflow-auto"
-    style="height: calc(100vh - 260px); font-family: monospace;"></pre>
-</div>
-
-</main>
-
-<script>
-// ── State ────────────────────────────────────────────────────────────────────
-const state = {
-  currentMemFile: 'Soul.md',
-  logPaused: false,
-  logLines: [],
-  wsConnected: false,
-};
-
-// ── Auth ─────────────────────────────────────────────────────────────────────
-function authHeaders() {
-  const t = localStorage.getItem('ccoli_token');
-  return t ? { 'X-Auth-Token': t } : {};
-}
-
-// ── API helpers ──────────────────────────────────────────────────────────────
-const API = {
-  get: (path) => fetch(path, { headers: authHeaders() }).then(r => r.json()),
-  post: (path, body) => fetch(path, {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).then(r => r.json()),
-  put: (path, body) => fetch(path, {
-    method: 'PUT',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).then(r => r.json()),
-  patch: (path, body) => fetch(path, {
-    method: 'PATCH',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).then(r => r.json()),
-  del: (path) => fetch(path, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  }).then(r => r.json()),
-};
-
-// ── Tab switching ────────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  const btns = document.querySelectorAll('.tab-btn');
-  const labels = ['overview','memory','conversation','schedules','chat','settings','logs'];
-  btns[labels.indexOf(name)]?.classList.add('active');
-
-  // Load data for each tab
-  if (name === 'overview') loadOverview();
-  if (name === 'memory') loadMem(state.currentMemFile);
-  if (name === 'conversation') { loadSpeakers(); loadConversation(); }
-  if (name === 'schedules') loadSchedules();
-  if (name === 'settings') { loadConfig(); loadIntegrations(); }
-  if (name === 'logs') loadLogs();
-}
-
-// ── Emotion helpers ──────────────────────────────────────────────────────────
-function setEmotion(emotion) {
-  const pill = document.getElementById('emotion-pill');
-  pill.className = `emotion-${emotion} px-2 py-0.5 rounded text-xs font-bold`;
-  pill.textContent = emotion;
-  const ov = document.getElementById('ov-emotion');
-  if (ov) { ov.className = `text-2xl font-bold emotion-${emotion} rounded px-2`; ov.textContent = emotion; }
-}
-
-// ── WebSocket ────────────────────────────────────────────────────────────────
-let ws;
-function connectWS() {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${proto}//${location.host}/ws`);
-
-  ws.onopen = () => {
-    state.wsConnected = true;
-    document.getElementById('ws-dot').className = 'ws-dot connected';
-    document.getElementById('ws-label').textContent = 'connected';
-  };
-
-  ws.onclose = () => {
-    state.wsConnected = false;
-    document.getElementById('ws-dot').className = 'ws-dot disconnected';
-    document.getElementById('ws-label').textContent = 'disconnected';
-    setTimeout(connectWS, 3000);
-  };
-
-  ws.onmessage = (e) => {
-    const ev = JSON.parse(e.data);
-    if (ev.event === 'emotion_change') setEmotion(ev.emotion);
-    if (ev.event === 'status_update') {
-      setEmotion(ev.emotion);
-      document.getElementById('mode-badge').textContent = ev.mode.toUpperCase();
-      const cc = document.getElementById('ov-conv-count');
-      if (cc) cc.textContent = ev.conversation_count;
-    }
-    if (ev.event === 'log') appendLog(ev.line);
-    if (ev.event === 'chat_response') appendChatBubble('assistant', ev.response, ev.emotion);
-  };
-
-  // Keep-alive ping
-  setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 20000);
-}
-
-// ── Overview ─────────────────────────────────────────────────────────────────
-async function loadOverview() {
-  const data = await API.get('/api/status');
-  document.getElementById('ov-mode').textContent = data.mode?.toUpperCase() || '—';
-  document.getElementById('ov-conv-count').textContent = data.conversation_count ?? '—';
-  setEmotion(data.emotion || 'neutral');
-  document.getElementById('mode-badge').textContent = (data.mode || 'agent').toUpperCase();
-
-  const pro = data.proactive || {};
-  document.getElementById('ov-proactive').innerHTML = `
-    <div>Enabled: <span class="${pro.enabled ? 'text-green-400' : 'text-red-400'}">${pro.enabled ? 'yes' : 'no'}</span></div>
-    <div>Count: <span class="text-white">${pro.count ?? 0}</span></div>
-    <div>Sleep: <span class="${pro.sleep_mode ? 'text-yellow-400' : 'text-gray-500'}">${pro.sleep_mode ? 'sleeping' : 'active'}</span></div>
-  `;
-
-  const timers = data.active_timers || [];
-  const alarms = data.active_alarms || [];
-  const t = document.getElementById('ov-timers');
-  if (!timers.length && !alarms.length) {
-    t.textContent = 'No active timers or alarms';
-  } else {
-    t.innerHTML = [
-      ...timers.map(x => `<div>⏱ Timer: ${x.label || x.id}</div>`),
-      ...alarms.map(x => `<div>⏰ Alarm: ${x.label || x.id}</div>`),
-    ].join('');
-  }
-
-  // Recent activity (last conversation messages)
-  const conv = await API.get('/api/conversation/?limit=5');
-  const activity = document.getElementById('ov-activity');
-  const msgs = conv.history || [];
-  if (!msgs.length) {
-    activity.innerHTML = '<div class="text-gray-500">No recent activity</div>';
-  } else {
-    activity.innerHTML = msgs.map(m => `
-      <div class="flex gap-3 text-xs border-b border-gray-800 pb-2">
-        <span class="${m.role === 'user' ? 'text-blue-400' : 'text-green-400'} w-20 shrink-0">${m.role}</span>
-        <span class="text-gray-300 truncate">${escHtml(String(m.content || '').substring(0, 120))}</span>
-      </div>
-    `).join('');
-  }
-}
-
-// ── Memory ───────────────────────────────────────────────────────────────────
-async function loadMem(filename) {
-  state.currentMemFile = filename;
-  document.getElementById('mem-filename').textContent = filename;
-  document.querySelectorAll('.mem-tab-btn').forEach(b => {
-    b.className = 'mem-tab-btn bg-gray-700 text-white px-3 py-1 rounded text-sm';
-  });
-  const labels = ['Soul.md','User.md','Shortterm_Memory.md','Longterm_Memory.md','Relation.md'];
-  const idx = labels.indexOf(filename);
-  if (idx >= 0) document.querySelectorAll('.mem-tab-btn')[idx].className = 'mem-tab-btn bg-blue-700 text-white px-3 py-1 rounded text-sm';
-
-  const data = await API.get('/api/memory/' + filename);
-  document.getElementById('mem-editor').value = data.content || '';
-  updateCharCount();
-  document.getElementById('mem-msg').textContent = '';
-}
-
-function switchMemTab(f) { loadMem(f); }
-function updateCharCount() {
-  const v = document.getElementById('mem-editor').value;
-  document.getElementById('mem-charcount').textContent = `${v.length} chars`;
-}
-
-async function saveMem() {
-  const content = document.getElementById('mem-editor').value;
-  const result = await API.put('/api/memory/' + state.currentMemFile, { content });
-  const msg = document.getElementById('mem-msg');
-  if (result.ok) { msg.className = 'text-xs mt-1 h-4 text-green-400'; msg.textContent = 'Saved.'; }
-  else { msg.className = 'text-xs mt-1 h-4 text-red-400'; msg.textContent = 'Save failed.'; }
-  setTimeout(() => { msg.textContent = ''; }, 2000);
-}
-
-// ── Conversation ─────────────────────────────────────────────────────────────
-async function loadSpeakers() {
-  const data = await API.get('/api/conversation/speakers');
-  const sel = document.getElementById('conv-speaker');
-  sel.innerHTML = '<option value="">All</option>' +
-    (data.speakers || []).map(s => `<option value="${s}">${s}</option>`).join('');
-}
-
-async function loadConversation() {
-  const limit = document.getElementById('conv-limit').value || 50;
-  const speaker = document.getElementById('conv-speaker').value;
-  const qs = `?limit=${limit}${speaker ? '&speaker_id=' + encodeURIComponent(speaker) : ''}`;
-  const data = await API.get('/api/conversation/' + qs);
-  const tbody = document.getElementById('conv-table');
-  const msgs = data.history || [];
-  if (!msgs.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="px-3 py-4 text-center text-gray-500">No messages</td></tr>';
-    return;
-  }
-  tbody.innerHTML = msgs.map(m => `
-    <tr class="hover:bg-gray-800">
-      <td class="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">${m.timestamp || ''}</td>
-      <td class="px-3 py-2 text-gray-400 text-xs">${m.speaker_id || '—'}</td>
-      <td class="px-3 py-2"><span class="${m.role==='user'?'text-blue-400':'text-green-400'} text-xs">${m.role}</span></td>
-      <td class="px-3 py-2 text-gray-200 text-xs">${escHtml(String(m.content||''))}</td>
-    </tr>
-  `).join('');
-}
-
-async function clearConversation() {
-  if (!confirm('Clear all conversation history?')) return;
-  await API.del('/api/conversation/');
-  loadConversation();
-}
-
-// ── Schedules ────────────────────────────────────────────────────────────────
-async function loadSchedules() {
-  const data = await API.get('/api/schedules/');
-  const list = document.getElementById('sch-list');
-  const schedules = (data.schedules || []).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
-  if (!schedules.length) {
-    list.innerHTML = '<div class="text-gray-500 text-sm">No schedules</div>';
-    return;
-  }
-  const now = new Date();
-  list.innerHTML = schedules.map(s => {
-    const dt = new Date(s.datetime);
-    const past = dt < now;
-    const color = s.completed ? 'border-gray-700 opacity-50' : past ? 'border-gray-700' : 'border-blue-800';
-    const dtStr = dt.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    return `
-      <div class="bg-gray-900 rounded border ${color} p-3 flex items-start justify-between gap-3">
-        <div class="flex-1">
-          <div class="font-bold text-sm ${s.completed ? 'line-through text-gray-500' : 'text-white'}">${escHtml(s.title)}</div>
-          <div class="text-xs text-gray-400 mt-1">${dtStr}${s.reminder_before ? ` · remind ${s.reminder_before}min before` : ''}</div>
-          ${s.description ? `<div class="text-xs text-gray-500 mt-1">${escHtml(s.description)}</div>` : ''}
-        </div>
-        <div class="flex gap-2 shrink-0">
-          ${!s.completed ? `<button onclick="completeSchedule(${s.id})" class="text-xs bg-green-900 hover:bg-green-800 text-green-200 px-2 py-1 rounded">Done</button>` : ''}
-          <button onclick="deleteSchedule(${s.id})" class="text-xs bg-red-900 hover:bg-red-800 text-red-200 px-2 py-1 rounded">Delete</button>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-async function addSchedule() {
-  const title = document.getElementById('sch-title').value.trim();
-  const dt = document.getElementById('sch-dt').value;
-  const desc = document.getElementById('sch-desc').value.trim();
-  const remind = parseInt(document.getElementById('sch-remind').value) || 0;
-  const msg = document.getElementById('sch-msg');
-  if (!title || !dt) { msg.textContent = 'Title and datetime required'; return; }
-  const result = await API.post('/api/schedules/', { title, datetime: dt, description: desc, reminder_before: remind });
-  msg.textContent = result.message || (result.ok ? 'Added!' : 'Failed');
-  if (result.ok) {
-    document.getElementById('sch-title').value = '';
-    document.getElementById('sch-desc').value = '';
-    loadSchedules();
-  }
-  setTimeout(() => { msg.textContent = ''; }, 3000);
-}
-
-async function deleteSchedule(id) {
-  if (!confirm('Delete this schedule?')) return;
-  await API.del('/api/schedules/' + id);
-  loadSchedules();
-}
-
-async function completeSchedule(id) {
-  await API.post('/api/schedules/' + id + '/complete', {});
-  loadSchedules();
-}
-
-// ── Chat ─────────────────────────────────────────────────────────────────────
-function appendChatBubble(role, text, emotion) {
-  const box = document.getElementById('chat-messages');
-  const isUser = role === 'user';
-  const div = document.createElement('div');
-  div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
-  div.innerHTML = `
-    <div class="max-w-lg">
-      <div class="${isUser ? 'bg-blue-700 text-white' : 'bg-gray-800 text-gray-100'} rounded-lg px-4 py-2 text-sm">
-        ${escHtml(text)}
-      </div>
-      ${emotion && !isUser ? `<div class="mt-1 text-xs"><span class="emotion-${emotion} px-1 rounded">${emotion}</span></div>` : ''}
-    </div>
-  `;
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
-}
-
-async function sendChat() {
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  appendChatBubble('user', text);
-  try {
-    const result = await API.post('/api/chat/', { text, speaker_id: 'web_user' });
-    appendChatBubble('assistant', result.response || '(no response)', result.emotion);
-  } catch (e) {
-    appendChatBubble('assistant', '(error: ' + e.message + ')');
-  }
-}
-
-// ── Settings: Config ─────────────────────────────────────────────────────────
-const SKIP_SECTIONS = ['web'];  // hide internal sections
-
-async function loadConfig() {
-  const cfg = await API.get('/api/config/');
-  const container = document.getElementById('config-sections');
-  container.innerHTML = '';
-  for (const [section, values] of Object.entries(cfg)) {
-    if (SKIP_SECTIONS.includes(section) || typeof values !== 'object') continue;
-    const div = document.createElement('div');
-    div.innerHTML = `
-      <div class="text-blue-400 text-xs mb-2 font-bold uppercase">${section}</div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2" id="cfg-${section}"></div>
-      <button onclick="saveConfigSection('${section}')"
-        class="mt-2 bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs">Save ${section}</button>
-      <span id="cfg-msg-${section}" class="text-xs ml-2 text-green-400 hidden">Saved!</span>
-    `;
-    const grid = div.querySelector(`#cfg-${section}`);
-    for (const [key, val] of Object.entries(values)) {
-      const inp = document.createElement('div');
-      inp.innerHTML = `
-        <label class="text-xs text-gray-400">${key}</label>
-        <input data-section="${section}" data-key="${key}"
-          class="cfg-input w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200 mt-0.5"
-          value="${escHtml(String(val))}">
-      `;
-      grid.appendChild(inp);
-    }
-    container.appendChild(div);
-  }
-}
-
-async function saveConfigSection(section) {
-  const inputs = document.querySelectorAll(`[data-section="${section}"]`);
-  for (const inp of inputs) {
-    const key = inp.dataset.key;
-    let val = inp.value;
-    // Try to cast to number/bool
-    if (val === 'true') val = true;
-    else if (val === 'false') val = false;
-    else if (!isNaN(val) && val !== '') val = Number(val);
-    await API.patch('/api/config/', { section, key, value: val });
-  }
-  const msg = document.getElementById(`cfg-msg-${section}`);
-  msg.classList.remove('hidden');
-  setTimeout(() => msg.classList.add('hidden'), 2000);
-}
-
-// ── Settings: Integrations ───────────────────────────────────────────────────
-async function loadIntegrations() {
-  const data = await API.get('/api/integrations/');
-  const list = document.getElementById('integrations-list');
-  list.innerHTML = '';
-  for (const [name, info] of Object.entries(data.integrations || {})) {
-    const card = document.createElement('div');
-    card.className = 'bg-gray-800 rounded p-3 border border-gray-700';
-    card.innerHTML = `
-      <div class="flex justify-between items-center mb-2">
-        <span class="font-bold text-sm">${name}</span>
-        <div class="flex gap-2 items-center">
-          <span class="text-xs ${info.configured ? 'text-green-400' : 'text-red-400'}">
-            ${info.configured ? '● configured' : '○ not configured'}
-          </span>
-          <label class="flex items-center gap-1 text-xs">
-            <input type="checkbox" ${info.enabled ? 'checked' : ''}
-              onchange="toggleIntegration('${name}', this.checked)">
-            enabled
-          </label>
-        </div>
-      </div>
-      <button onclick="healthCheck('${name}', this)"
-        class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">Health Check</button>
-      <span id="health-${name}" class="text-xs ml-2 text-gray-400"></span>
-    `;
-    list.appendChild(card);
-  }
-}
-
-async function toggleIntegration(name, enabled) {
-  await API.post(`/api/integrations/${name}/enabled`, { enabled });
-}
-
-async function healthCheck(name, btn) {
-  const span = document.getElementById(`health-${name}`);
-  span.textContent = 'checking...';
-  try {
-    const result = await API.get(`/api/integrations/${name}/health`);
-    span.textContent = result.ok ? '✓ ok' : `✗ ${result.error?.user_message || 'failed'}`;
-    span.className = `text-xs ml-2 ${result.ok ? 'text-green-400' : 'text-red-400'}`;
-  } catch (e) {
-    span.textContent = '✗ error';
-    span.className = 'text-xs ml-2 text-red-400';
-  }
-}
-
-// ── Logs ─────────────────────────────────────────────────────────────────────
-async function loadLogs() {
-  const data = await API.get('/api/logs/?tail=200');
-  state.logLines = data.lines || [];
-  renderLogs();
-}
-
-function appendLog(line) {
-  if (state.logPaused) return;
-  state.logLines.push(line);
-  if (state.logLines.length > 500) state.logLines.shift();
-  renderLogs();
-}
-
-function renderLogs() {
-  const filter = document.getElementById('log-filter').value;
-  const box = document.getElementById('log-box');
-  const lines = filter === 'ALL'
-    ? state.logLines
-    : state.logLines.filter(l => l.includes(`| ${filter}`));
-  box.innerHTML = lines.map(l => {
-    let cls = '';
-    if (l.includes('| ERROR')) cls = 'log-ERROR';
-    else if (l.includes('| WARNING')) cls = 'log-WARNING';
-    else if (l.includes('| INFO')) cls = 'log-INFO';
-    else cls = 'log-DEBUG';
-    return `<span class="${cls}">${escHtml(l)}</span>`;
-  }).join('\n');
-  if (!state.logPaused) box.scrollTop = box.scrollHeight;
-  document.getElementById('log-count').textContent = `${lines.length} lines`;
-}
-
-function filterLogs() { renderLogs(); }
-
-function toggleLogPause() {
-  state.logPaused = !state.logPaused;
-  document.getElementById('log-pause-btn').textContent = state.logPaused ? 'Resume' : 'Pause';
-}
-
-function clearLogs() {
-  state.logLines = [];
-  renderLogs();
-}
-
-// ── Utils ────────────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ── Init ─────────────────────────────────────────────────────────────────────
-connectWS();
-loadOverview();
-setInterval(loadOverview, 30000);  // auto-refresh overview every 30s
-</script>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script>
+  const state={tab:localStorage.getItem('ccoli.activeTab')||'overview',token:localStorage.getItem('ccoli.authToken')||'',memory:localStorage.getItem('ccoli.activeMemory')||'Soul.md',status:null,memoryFiles:[],conversations:[],schedules:[],logs:[],chat:[],integrations:{},integrationHealth:{},ws:null,wsHeartbeat:null,wsRetry:null,logsPaused:false,lastChatSignature:''};
+  const emo={neutral:'차분함',happy:'기쁨',excited:'들뜸',calm:'안정',sad:'가라앉음',angry:'예민함',surprised:'놀람',worried:'걱정'};const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  document.addEventListener('DOMContentLoaded',()=>{bind();$('#auth-token').value=state.token;seedDate();renderChat();renderLogs();openTab(state.tab);connectWs();refreshAll(false);setInterval(()=>fetchStatus(true),15000);setInterval(()=>fetchSchedules(true),45000);setInterval(()=>fetchConversation(true),30000);setInterval(()=>{if(!state.logsPaused)fetchLogs(true)},18000)});
+  function bind(){ $('#nav').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(b)openTab(b.dataset.tab)}); $('#refresh-all').addEventListener('click',()=>refreshAll()); $('#connect-ws').addEventListener('click',()=>connectWs(true)); $('#reload-memory').addEventListener('click',()=>loadMemory(state.memory)); $('#save-memory').addEventListener('click',saveMemory); $('#conversation-refresh').addEventListener('click',()=>fetchConversation()); $('#conversation-clear').addEventListener('click',clearConversation); $('#schedules-refresh').addEventListener('click',()=>fetchSchedules()); $('#schedule-form').addEventListener('submit',createSchedule); $('#chat-form').addEventListener('submit',sendChat); $('#chat-clear').addEventListener('click',clearChat); $('#save-token').addEventListener('click',saveToken); $('#clear-token').addEventListener('click',clearToken); $('#config-patch-form').addEventListener('submit',patchConfig); $('#config-refresh').addEventListener('click',()=>fetchConfig()); $('#integrations-refresh').addEventListener('click',()=>fetchIntegrations()); $('#logs-refresh').addEventListener('click',()=>fetchLogs()); $('#logs-pause').addEventListener('click',toggleLogs); $('#log-tail').addEventListener('change',()=>fetchLogs()); $('#log-filter').addEventListener('input',renderLogs); $('#speaker-filter').addEventListener('change',()=>fetchConversation()); $('#conversation-limit').addEventListener('change',()=>fetchConversation()); document.body.addEventListener('click',e=>{const t=e.target.closest('[data-tab-target]');if(t){openTab(t.dataset.tabTarget);if(t.dataset.memoryFile)loadMemory(t.dataset.memoryFile);return} const m=e.target.closest('[data-memory-file-button]');if(m)return loadMemory(m.dataset.memoryFileButton); const s=e.target.closest('[data-schedule-action]');if(s){const id=Number(s.dataset.scheduleId);return s.dataset.scheduleAction==='complete'?completeSchedule(id):deleteSchedule(id)} const i=e.target.closest('[data-integration-action]');if(i){const n=i.dataset.integrationName;return i.dataset.integrationAction==='health'?checkIntegration(n):toggleIntegration(n,i.dataset.integrationEnabled!=='true')}})}
+  function openTab(tab){state.tab=tab;localStorage.setItem('ccoli.activeTab',tab);$$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));$$('.tab').forEach(p=>p.classList.toggle('active',p.id===`tab-${tab}`));if(tab==='settings'){fetchConfig(true);fetchIntegrations(true)} if(tab==='logs')fetchLogs(true); if(tab==='conversation')fetchConversation(true)}
+  async function refreshAll(silent=false){const r=await Promise.allSettled([fetchStatus(true),fetchMemoryList(true),loadMemory(state.memory,true),fetchSpeakers(true),fetchConversation(true),fetchSchedules(true),fetchConfig(true),fetchIntegrations(true),fetchLogs(true)]);const failed=r.filter(x=>x.status==='rejected').length;if(!silent)toast(failed?`일부 데이터만 불러왔습니다. 실패 ${failed}건`:'대시보드를 새로고침했습니다.')}
+  async function api(path,opt={}){const h=new Headers(opt.headers||{});if(state.token)h.set('X-Auth-Token',state.token);if(opt.body&&!h.has('Content-Type'))h.set('Content-Type','application/json');const res=await fetch(path,{...opt,headers:h});const ct=res.headers.get('content-type')||'';const data=ct.includes('application/json')?await res.json():await res.text();if(!res.ok){const d=typeof data==='string'?data:data.detail||JSON.stringify(data);throw new Error(d||`HTTP ${res.status}`)}return data}
+  async function fetchStatus(s=false){try{state.status=await api('/api/status');renderStatus()}catch(e){if(!s)toast(`상태 로드 실패: ${e.message}`);throw e}}
+  function renderStatus(){const s=state.status||{},emotion=s.emotion||'neutral',emotionLabel=emo[emotion]||emotion,mode=s.mode||'agent',count=Number(s.conversation_count||0),history=Array.isArray(s.emotion_history)?s.emotion_history:[],p=s.proactive||{},timers=s.active_timers&&Array.isArray(s.active_timers.timers)?s.active_timers.timers:[],alarms=s.active_alarms&&Array.isArray(s.active_alarms.alarms)?s.active_alarms.alarms:[],pl=p.sleep_mode?'수면':(p.enabled?'활성':'비활성');$('#mode-badge').textContent=`mode · ${mode}`;$('#emotion-pill').textContent=`emotion · ${emotionLabel}`;$('#conversation-pill').textContent=`대화 ${count}회`;$('#timer-count').textContent=String(timers.length);$('#alarm-count').textContent=String(alarms.length);$('#proactive-state').textContent=pl;$('#metric-emotion').textContent=emotionLabel;$('#metric-emotion-sub').textContent=history.length?`최근 ${history.slice(-3).join(' · ')}`:'최근 기록 없음';$('#metric-mode').textContent=mode;$('#metric-mode-sub').textContent=mode==='robot'?'행동 중심':'대화 중심';$('#metric-conversation').textContent=String(count);$('#metric-conversation-sub').textContent=count?'기억이 계속 누적되고 있습니다.':'아직 대화가 없습니다.';$('#metric-proactive').textContent=pl;$('#metric-proactive-sub').textContent=p.enabled?`최근 상호작용 ${dur(p.time_since_last_interaction)} 전`:'자동 선제 대화 꺼짐';$('#summary-emotion-title').textContent=`${emotionLabel} 상태로 운영 중`;$('#summary-emotion-meta').textContent=`${mode} 모드에서 대화 ${count}회를 처리했습니다.`;$('#summary-proactive-title').textContent=p.sleep_mode?'현재 수면 모드입니다.':`최근 상호작용 ${dur(p.time_since_last_interaction)} 전`;$('#summary-proactive-meta').textContent=p.sleep_mode?`재개 예정 ${fmtDate(p.sleep_until)}`:p.enabled?`선제 대화 간격 ${dur(p.interval)}`:'proactive 기능이 꺼져 있습니다.';$('#hero-headline').textContent=mode==='robot'?`콜리는 지금 ${emotionLabel} 분위기로 로봇 모드에 있습니다.`:`콜리는 지금 ${emotionLabel} 분위기로 다음 대화를 기다리고 있습니다.`;$('#hero-description').textContent=p.sleep_mode?'현재는 수면 모드이므로 선제 대화를 잠시 멈춘 상태입니다.':p.enabled?`최근 상호작용은 ${dur(p.time_since_last_interaction)} 전에 있었습니다.`:'현재는 수동 상호작용 중심으로 운영되고 있습니다.';$('#hero-note').textContent=[`${timers.length}개 타이머`,`${alarms.length}개 알람`,count?`대화 ${count}회`:'새 대화 대기'].join(' · ')}
+  async function fetchMemoryList(s=false){try{const d=await api('/api/memory/');state.memoryFiles=Array.isArray(d.files)?d.files:[];$('#memory-list').innerHTML=state.memoryFiles.length?state.memoryFiles.map(f=>`<button class="mem ${f.filename===state.memory?'active':''}" type="button" data-memory-file-button="${esc(f.filename)}"><span><strong>${esc(f.filename)}</strong><br><span class="meta">${num(f.size)}자</span></span><span class="pill">열기</span></button>`).join(''):'<div class="empty">메모리 파일이 아직 없습니다.</div>'}catch(e){if(!s)toast(`메모리 목록 로드 실패: ${e.message}`);throw e}}
+  async function loadMemory(file=state.memory,s=false){try{const d=await api(`/api/memory/${encodeURIComponent(file)}`);state.memory=d.filename||file;localStorage.setItem('ccoli.activeMemory',state.memory);$('#memory-title').textContent=state.memory;$('#memory-meta').textContent=`${num((d.content||'').length)}자`;$('#memory-editor').value=d.content||'';fetchMemoryList(true)}catch(e){if(!s)toast(`메모리 로드 실패: ${e.message}`);throw e}}
+  async function saveMemory(){try{const content=$('#memory-editor').value;await api(`/api/memory/${encodeURIComponent(state.memory)}`,{method:'PUT',body:JSON.stringify({content})});$('#memory-meta').textContent=`${num(content.length)}자 · 방금 저장됨`;fetchMemoryList(true);toast(`${state.memory} 저장 완료`)}catch(e){toast(`메모리 저장 실패: ${e.message}`)}}
+  async function fetchSpeakers(s=false){try{const d=await api('/api/conversation/speakers');const sp=Array.isArray(d.speakers)?d.speakers:[];const sel=$('#speaker-filter'),cur=sel.value;sel.innerHTML='<option value="">전체 대화</option>'+sp.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');if(sp.includes(cur))sel.value=cur}catch(e){if(!s)toast(`화자 목록 로드 실패: ${e.message}`);throw e}}
+  async function fetchConversation(s=false){try{const p=new URLSearchParams({limit:String(Number($('#conversation-limit').value||50))}),speaker=$('#speaker-filter').value;if(speaker)p.set('speaker_id',speaker);const d=await api(`/api/conversation/?${p.toString()}`);state.conversations=Array.isArray(d.history)?d.history:[];$('#conversation-list').innerHTML=state.conversations.length?state.conversations.map(x=>{const n=norm(x),rc=n.role==='assistant'?'assistant':n.role==='system'?'system':'';return `<article class="conv"><header><span class="role ${rc}">${esc(roleKo(n.role))}</span><span>${esc(n.timestamp?fmtDate(n.timestamp):'시간 정보 없음')}</span></header><div>${esc(n.content)}</div><div class="meta">emotion · ${esc(n.emotion||'-')} · 전체 ${num(d.total||state.conversations.length)}개 중 일부</div></article>`}).join(''):'<div class="empty">대화 기록이 아직 없습니다.</div>';renderOverviewConversation()}catch(e){if(!s)toast(`대화 로드 실패: ${e.message}`);throw e}}
+  async function clearConversation(){if(!confirm('대화 히스토리를 비울까요?'))return;try{await api('/api/conversation/',{method:'DELETE'});state.conversations=[];$('#conversation-list').innerHTML='<div class="empty">대화 기록이 아직 없습니다.</div>';renderOverviewConversation();toast('대화 히스토리를 비웠습니다.')}catch(e){toast(`대화 삭제 실패: ${e.message}`)}}
+  async function fetchSchedules(s=false){try{const d=await api('/api/schedules/');state.schedules=Array.isArray(d.schedules)?d.schedules.slice().sort((a,b)=>String(a.datetime||'').localeCompare(String(b.datetime||''))):[];$('#schedule-list').innerHTML=state.schedules.length?state.schedules.map(v=>`<article class="sched"><div><strong>${esc(v.title||'제목 없음')}</strong><p class="meta">${esc(fmtDate(v.datetime))}</p></div><p>${esc(v.description||'설명 없음')}</p><div class="chips"><span class="pill">${v.completed?'완료됨':'진행 중'}</span><span class="pill">알림 ${Number(v.reminder_before||0)}분 전</span></div><div class="actions">${v.completed?'':`<button class="btn small secondary" type="button" data-schedule-action="complete" data-schedule-id="${Number(v.id)}">완료 처리</button>`}<button class="btn small danger" type="button" data-schedule-action="delete" data-schedule-id="${Number(v.id)}">삭제</button></div></article>`).join(''):'<div class="empty">등록된 일정이 없습니다.</div>';renderOverviewSchedules()}catch(e){if(!s)toast(`일정 로드 실패: ${e.message}`);throw e}}
+  function renderOverviewSchedules(){const root=$('#overview-schedules'),items=state.schedules.filter(v=>!v.completed).slice(0,4);root.innerHTML=items.length?items.map(v=>`<div class="item"><strong>${esc(v.title||'제목 없음')}</strong><p class="meta">${esc(fmtDate(v.datetime))} · 알림 ${Number(v.reminder_before||0)}분 전</p></div>`).join(''):'<div class="empty">다가오는 일정이 없습니다.</div>'}
+  async function createSchedule(e){e.preventDefault();try{await api('/api/schedules/',{method:'POST',body:JSON.stringify({title:$('#schedule-title').value.trim(),datetime:$('#schedule-datetime').value,description:$('#schedule-description').value.trim(),reminder_before:Number($('#schedule-reminder').value||0)})});$('#schedule-form').reset();seedDate();fetchSchedules(true);toast('일정을 추가했습니다.')}catch(err){toast(`일정 추가 실패: ${err.message}`)}}
+  async function completeSchedule(id){try{await api(`/api/schedules/${id}/complete`,{method:'POST'});fetchSchedules(true);toast('일정을 완료 처리했습니다.')}catch(e){toast(`일정 완료 실패: ${e.message}`)}}
+  async function deleteSchedule(id){if(!confirm('이 일정을 삭제할까요?'))return;try{await api(`/api/schedules/${id}`,{method:'DELETE'});fetchSchedules(true);toast('일정을 삭제했습니다.')}catch(e){toast(`일정 삭제 실패: ${e.message}`)}}
+  async function sendChat(e){e.preventDefault();const speaker=$('#chat-speaker').value.trim()||'web_user',text=$('#chat-input').value.trim();if(!text)return toast('메시지를 입력해주세요.');appendChat('user',text,{speaker});$('#chat-input').value='';try{const d=await api('/api/chat/',{method:'POST',body:JSON.stringify({text,speaker_id:speaker})});state.lastChatSignature=`${speaker}::${text}::${d.response||''}`;appendChat('assistant',d.response||'(응답 없음)',{emotion:d.emotion,intent:d.intent});toast('채팅 응답을 받았습니다.')}catch(err){appendChat('assistant',`오류: ${err.message}`,{emotion:'error'});toast(`채팅 실패: ${err.message}`)}}
+  function appendChat(role,text,extra={}){state.chat.push({role,text,timestamp:new Date().toISOString(),...extra});state.chat=state.chat.slice(-60);renderChat()}
+  function clearChat(){state.chat=[];renderChat()}
+  function renderChat(){const root=$('#chat-feed');root.innerHTML=state.chat.length?state.chat.map(m=>`<article class="bubble ${m.role==='assistant'?'assistant-b':''}"><p>${esc(m.text)}</p><p class="meta">${esc(roleKo(m.role))} · ${esc(fmtDate(m.timestamp))}${m.emotion?` · emotion ${esc(m.emotion)}`:''}${m.intent?` · intent ${esc(m.intent)}`:''}${m.speaker?` · speaker ${esc(m.speaker)}`:''}</p></article>`).join(''):'<div class="empty">아직 웹 채팅이 없습니다. 오른쪽 입력창에서 시작해보세요.</div>';root.scrollTop=root.scrollHeight}
+  async function fetchConfig(s=false){try{const d=await api('/api/config/');$('#config-json').textContent=JSON.stringify(d,null,2)}catch(e){if(!s)toast(`설정 로드 실패: ${e.message}`);throw e}}
+  async function patchConfig(e){e.preventDefault();const section=$('#config-section').value.trim(),key=$('#config-key').value.trim(),raw=$('#config-value').value.trim();if(!section||!key)return toast('섹션과 키를 입력해주세요.');try{await api('/api/config/',{method:'PATCH',body:JSON.stringify({section,key,value:parseVal(raw)})});fetchConfig(true);toast(`${section}.${key} 값을 반영했습니다.`)}catch(err){toast(`설정 반영 실패: ${err.message}`)}}
+  async function fetchIntegrations(s=false){try{const d=await api('/api/integrations/');state.integrations=d.integrations||{};const names=Object.keys(state.integrations);$('#integration-list').innerHTML=names.length?names.map(n=>{const x=state.integrations[n]||{},h=state.integrationHealth[n],ht=h?(h.ok?'정상 응답':h.error||'오류'):'아직 확인하지 않음';return `<article class="integ"><div><strong>${esc(n)}</strong><p class="meta">${x.enabled?'활성':'비활성'} · ${x.configured?'구성됨':'구성 필요'} · health ${esc(ht)}</p></div><div class="actions"><button class="btn small secondary" type="button" data-integration-action="health" data-integration-name="${esc(n)}">health 확인</button><button class="btn small ${x.enabled?'ghost':'primary'}" type="button" data-integration-action="toggle" data-integration-name="${esc(n)}" data-integration-enabled="${x.enabled?'true':'false'}">${x.enabled?'비활성화':'활성화'}</button></div></article>`}).join(''):'<div class="empty">등록된 연동이 없습니다.</div>'}catch(e){if(!s)toast(`연동 로드 실패: ${e.message}`);throw e}}
+  async function toggleIntegration(name,enabled){try{await api(`/api/integrations/${encodeURIComponent(name)}/enabled`,{method:'POST',body:JSON.stringify({enabled})});state.integrations[name]={...(state.integrations[name]||{}),enabled};fetchIntegrations(true);toast(`${name} 연동을 ${enabled?'활성화':'비활성화'}했습니다.`)}catch(e){toast(`연동 상태 변경 실패: ${e.message}`)}}
+  async function checkIntegration(name){try{const d=await api(`/api/integrations/${encodeURIComponent(name)}/health`);state.integrationHealth[name]={ok:d.ok,error:d.error?JSON.stringify(d.error):''};fetchIntegrations(true);toast(`${name} health 확인 완료`)}catch(e){state.integrationHealth[name]={ok:false,error:e.message};fetchIntegrations(true);toast(`health 확인 실패: ${e.message}`)}}
+  async function fetchLogs(s=false){try{const d=await api(`/api/logs/?tail=${Number($('#log-tail').value||150)}`);state.logs=Array.isArray(d.lines)?d.lines.slice(-500):[];renderLogs();renderOverviewLogs()}catch(e){if(!s)toast(`로그 로드 실패: ${e.message}`);throw e}}
+  function renderLogs(){const f=($('#log-filter').value||'').trim().toLowerCase(),lines=f?state.logs.filter(x=>x.toLowerCase().includes(f)):state.logs;$('#logs-view').textContent=lines.length?lines.join('\n'):'표시할 로그가 없습니다.';renderOverviewLogs()}
+  function toggleLogs(){state.logsPaused=!state.logsPaused;$('#logs-pause').textContent=state.logsPaused?'재개':'일시정지';toast(state.logsPaused?'로그 자동 갱신을 멈췄습니다.':'로그 자동 갱신을 다시 시작합니다.')}
+  function renderOverviewConversation(){const root=$('#overview-conversation'),items=state.conversations.slice(-4).reverse();root.innerHTML=items.length?items.map(x=>{const n=norm(x);return `<div class="item"><strong>${esc(roleKo(n.role))}</strong><p>${esc(trunc(n.content,86))}</p><p class="meta">${esc(n.timestamp?fmtDate(n.timestamp):'시간 정보 없음')}</p></div>`}).join(''):'<div class="empty">최근 대화가 없습니다.</div>'}
+  function renderOverviewLogs(){const root=$('#overview-logs'),items=state.logs.slice(-4).reverse();root.innerHTML=items.length?items.map(x=>`<div class="item"><p>${esc(trunc(x,110))}</p></div>`).join(''):'<div class="empty">아직 로그가 없습니다.</div>'}
+  function saveToken(){state.token=$('#auth-token').value.trim();if(state.token)localStorage.setItem('ccoli.authToken',state.token);else localStorage.removeItem('ccoli.authToken');toast('토큰을 저장했습니다.');refreshAll(true)}
+  function clearToken(){state.token='';$('#auth-token').value='';localStorage.removeItem('ccoli.authToken');toast('토큰을 지웠습니다.')}
+  function connectWs(force=false){if(force&&state.ws){clearWs();try{state.ws.close()}catch(e){console.warn(e)}}if(state.ws&&(state.ws.readyState===WebSocket.OPEN||state.ws.readyState===WebSocket.CONNECTING))return;const protocol=location.protocol==='https:'?'wss:':'ws:';wsState(false,'실시간 연결 시도 중');try{state.ws=new WebSocket(`${protocol}//${location.host}/ws`)}catch(e){wsState(false,'실시간 연결 실패');toast(`웹소켓 연결 실패: ${e.message}`);return retryWs()}state.ws.addEventListener('open',()=>{wsState(true,'실시간 연결됨');clearWs();state.wsHeartbeat=setInterval(()=>{if(state.ws&&state.ws.readyState===WebSocket.OPEN)state.ws.send('ping')},20000)});state.ws.addEventListener('message',ev=>{try{handleWs(JSON.parse(ev.data))}catch(e){console.warn('Invalid WS payload',e)}});state.ws.addEventListener('close',()=>{wsState(false,'실시간 재연결 대기 중');clearWs();retryWs()});state.ws.addEventListener('error',()=>wsState(false,'실시간 연결 불안정'))}
+  function handleWs(p){if(!p||typeof p!=='object')return;if(p.event==='emotion_change'){state.status={...(state.status||{}),emotion:p.emotion};return renderStatus()}if(p.event==='status_update'){state.status={...(state.status||{}),...p};return renderStatus()}if(p.event==='log'&&p.line){state.logs.push(p.line);state.logs=state.logs.slice(-500);if(!state.logsPaused)renderLogs();return}if(p.event==='chat_response'){const sig=`${p.speaker_id||''}::${p.text||''}::${p.response||''}`;if(sig===state.lastChatSignature)return;state.lastChatSignature=sig;if(p.text)appendChat('user',p.text,{speaker:p.speaker_id||'web_user'});if(p.response)appendChat('assistant',p.response,{intent:p.intent,emotion:p.emotion})}}
+  function wsState(live,label){$('#ws-dot').classList.toggle('live',live);$('#ws-label').textContent=label}
+  function retryWs(){if(!state.wsRetry)state.wsRetry=setTimeout(()=>{state.wsRetry=null;connectWs()},3000)}
+  function clearWs(){if(state.wsHeartbeat){clearInterval(state.wsHeartbeat);state.wsHeartbeat=null}if(state.wsRetry){clearTimeout(state.wsRetry);state.wsRetry=null}}
+  function toast(msg){const n=document.createElement('div');n.className='toast';n.textContent=msg;$('#toasts').appendChild(n);setTimeout(()=>n.remove(),2600)}
+  function norm(x){return typeof x==='string'?{role:'user',content:x,timestamp:'',emotion:''}:{role:x?.role||'system',content:x?.content||x?.text||JSON.stringify(x||''),timestamp:x?.timestamp||x?.created_at||'',emotion:x?.emotion||''}}
+  function roleKo(r){return r==='assistant'?'콜리':r==='system'?'시스템':'사용자'}
+  function parseVal(v){if(v==='')return'';try{return JSON.parse(v)}catch{if(v==='true')return true;if(v==='false')return false;if(!Number.isNaN(Number(v))&&v.trim()!=='')return Number(v);return v}}
+  function fmtDate(v){if(!v)return'시간 정보 없음';const d=new Date(v);return Number.isNaN(d.getTime())?v:new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short'}).format(d)}
+  function dur(v){const s=Math.max(0,Math.round(Number(v||0)));if(s<60)return`${s}초`;if(s<3600)return`${Math.round(s/60)}분`;if(s<86400)return`${Math.round(s/3600)}시간`;return`${Math.round(s/86400)}일`}
+  function num(v){return new Intl.NumberFormat('ko-KR').format(Number(v||0))}
+  function trunc(v,m){const t=String(v||'');return t.length>m?`${t.slice(0,m-1)}…`:t}
+  function seedDate(){const d=new Date();d.setMinutes(0,0,0);d.setHours(d.getHours()+1);$('#schedule-datetime').value=localDate(d)}
+  function localDate(d){const p=n=>String(n).padStart(2,'0');return[d.getFullYear(),'-',p(d.getMonth()+1),'-',p(d.getDate()),'T',p(d.getHours()),':',p(d.getMinutes())].join('')}
+  function esc(v){return String(v||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;')}
+  </script>
 </body>
 </html>

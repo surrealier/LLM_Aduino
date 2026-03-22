@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+_KOREAN_WEEKDAYS = ("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
 
 # md 파일 이름 목록
 _FILES = ("Soul.md", "User.md", "Shortterm_Memory.md", "Longterm_Memory.md", "Relation.md")
@@ -98,7 +99,8 @@ class MemoryManager:
         long = self._cache.get("Longterm_Memory.md", "")
         rel = self._cache.get("Relation.md", "")
 
-        now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
+        current = datetime.now()
+        now = f"{current:%Y-%m-%d %H:%M} ({_KOREAN_WEEKDAYS[current.weekday()]})"
 
         parts = [
             soul,

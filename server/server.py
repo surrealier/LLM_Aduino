@@ -49,6 +49,10 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 # Audio processing constants
 SR = 16000
 UNSURE_POLICY = "NOOP"
+CONNECTION_GREETING_TTS_PAD_MS = 180.0
+TTS_CHUNK_EDGE_PAD_MS = 180.0
+TTS_CHUNK_MIDDLE_PAD_MS = 60.0
+TTS_FALLBACK_PAD_MS = 180.0
 
 ACTIONS_CONFIG = []
 current_mode = "agent"  # Default mode: agent
@@ -179,7 +183,7 @@ def _send_connection_greeting(
         send_action(conn, {"action": "MIC_UNLOCK"}, send_lock)
         return False
 
-    wav_bytes = agent.text_to_audio(greeting, trim_pad_ms=90.0)
+    wav_bytes = agent.text_to_audio(greeting, trim_pad_ms=CONNECTION_GREETING_TTS_PAD_MS)
     if not wav_bytes:
         log.warning("Connection greeting TTS generation returned empty audio")
         send_action(conn, {"action": "MIC_UNLOCK"}, send_lock)
@@ -278,12 +282,12 @@ def _build_tts_audio_payloads(agent, response_text: str, max_chunks: int = 3) ->
     failed_chunks = []
 
     for idx, tts_text in enumerate(tts_text_chunks, start=1):
-        trim_pad_ms = 140.0
+        trim_pad_ms = TTS_CHUNK_EDGE_PAD_MS
         if total_chunks > 1:
             if idx == 1 or idx == total_chunks:
-                trim_pad_ms = 80.0
+                trim_pad_ms = TTS_CHUNK_EDGE_PAD_MS
             else:
-                trim_pad_ms = 40.0
+                trim_pad_ms = TTS_CHUNK_MIDDLE_PAD_MS
         wav_bytes = agent.text_to_audio(
             tts_text,
             trim_pad_ms=trim_pad_ms,
@@ -309,7 +313,7 @@ def _build_tts_audio_payloads(agent, response_text: str, max_chunks: int = 3) ->
             "Retrying TTS as a single pass after %d chunk failure(s)",
             len(failed_chunks),
         )
-        fallback_audio = agent.text_to_audio(fallback_text, trim_pad_ms=90.0)
+        fallback_audio = agent.text_to_audio(fallback_text, trim_pad_ms=TTS_FALLBACK_PAD_MS)
         if fallback_audio:
             return [fallback_audio]
         return audio_chunks
@@ -775,6 +779,8 @@ def main():
     weather_config = config.get_weather_config()
     assistant_config = config.get_assistant_config()
     tts_config = config.get_tts_config()
+    memory_dir = config.get("memory", "memory_dir", default="memory")
+    memory_refresh_interval = int(config.get("memory", "refresh_interval", default=5))
 
     # Create a single shared LLM client
     llm_config = config.get_llm_config()
@@ -789,6 +795,12 @@ def main():
         api_key = llm_config.get("anthropic_api_key") or os.getenv("ANTHROPIC_API_KEY", "")
     elif provider == "gemini":
         api_key = llm_config.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")
+
+    if provider in {"chatgpt", "claude", "gemini"} and not api_key:
+        log.warning(
+            "%s provider selected but API key is missing. Replies will return a configuration warning.",
+            provider,
+        )
 
     llm_client = LLMClient(
         base_url=llm_config.get("base_url", "http://localhost:11434"),
@@ -814,6 +826,8 @@ def main():
         proactive_enabled=assistant_config.get("proactive", True),
         proactive_interval=assistant_config.get("proactive_interval", 1800),
         tts_voice=tts_config.get("voice", "ko-KR-SunHiNeural"),
+        memory_dir=memory_dir,
+        memory_refresh_interval=memory_refresh_interval,
     )
 
     log.info(

@@ -63,6 +63,10 @@ class Config:
             "decay_to_neutral": True,
             "decay_interval": 300
         },
+        "memory": {
+            "refresh_interval": 5,
+            "memory_dir": "memory"
+        },
         "logging": {
             "level": "INFO",
             "save_to_file": True,
@@ -179,10 +183,26 @@ class Config:
 
             if "SERIAL_BAUDRATE" in os.environ:
                 self.config.setdefault("connection", {})["serial_baudrate"] = int(os.environ["SERIAL_BAUDRATE"])
-            
-            if "DEVICE" in os.environ:
-                device = os.environ["DEVICE"]
-                self.config["stt"]["device"] = device
+
+            if "STT_MODEL_SIZE" in os.environ:
+                self.config.setdefault("stt", {})["model_size"] = os.environ["STT_MODEL_SIZE"]
+
+            if "STT_DEVICE" in os.environ:
+                self.config.setdefault("stt", {})["device"] = os.environ["STT_DEVICE"]
+            elif "DEVICE" in os.environ:
+                self.config.setdefault("stt", {})["device"] = os.environ["DEVICE"]
+
+            if "STT_LANGUAGE" in os.environ:
+                self.config.setdefault("stt", {})["language"] = os.environ["STT_LANGUAGE"]
+
+            if "TTS_VOICE" in os.environ:
+                self.config.setdefault("tts", {})["voice"] = os.environ["TTS_VOICE"]
+
+            if "MEMORY_DIR" in os.environ:
+                self.config.setdefault("memory", {})["memory_dir"] = os.environ["MEMORY_DIR"]
+
+            if "MEMORY_REFRESH_INTERVAL" in os.environ:
+                self.config.setdefault("memory", {})["refresh_interval"] = int(os.environ["MEMORY_REFRESH_INTERVAL"])
             
             if "ASSISTANT_NAME" in os.environ:
                 self.config["assistant"]["name"] = os.environ["ASSISTANT_NAME"]

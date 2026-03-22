@@ -78,7 +78,9 @@ static inline uint32_t audio_output_sample_rate() {
 }
 
 static inline size_t audio_output_start_threshold_bytes() {
-  return wired_tts_mode() ? 2048 : 4096;
+  // Start playback a bit earlier so the first syllable is not held back waiting
+  // for a large prebuffer. Keep wired mode slightly more conservative.
+  return wired_tts_mode() ? 1024 : 2048;
 }
 
 static bool stream_write_all(Stream& transport, const uint8_t* data, size_t len) {

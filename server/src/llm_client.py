@@ -26,6 +26,16 @@ class LLMClient:
         self.default_think = default_think
         self.url = f"{self.base_url}/api/chat"
         self.url_generate = f"{self.base_url}/api/generate"
+        self.last_error_code = None
+        self.last_error = ""
+
+    def _clear_error_state(self):
+        self.last_error_code = None
+        self.last_error = ""
+
+    def _remember_error(self, code: str, message: str):
+        self.last_error_code = code
+        self.last_error = message
 
     def chat(
         self,
@@ -35,6 +45,7 @@ class LLMClient:
         think: ThinkType = None,
     ) -> str:
         """LLM chat request. messages format: [{"role": ..., "content": ...}, ...]."""
+        self._clear_error_state()
         if self.provider != "ollama":
             return self._chat_external(messages, temperature, max_tokens)
         try:
@@ -98,6 +109,7 @@ class LLMClient:
                     return fallback.strip()
             return content.strip()
         except Exception as exc:
+            self._remember_error("provider_error", str(exc))
             log.error("Ollama API error: %s", exc)
             return ""
 
@@ -109,8 +121,12 @@ class LLMClient:
                 return self._chat_claude(messages, temperature, max_tokens)
             if self.provider == "chatgpt":
                 return self._chat_openai(messages, temperature, max_tokens)
+            self._remember_error("unsupported_provider", f"Unsupported LLM provider: {self.provider}")
             log.error("Unsupported LLM provider: %s", self.provider)
         except Exception as exc:
+            error_message = str(exc)
+            error_code = "missing_api_key" if "API_KEY is missing" in error_message else "provider_error"
+            self._remember_error(error_code, error_message)
             log.error("%s API error: %s", self.provider, exc)
         return ""
 

@@ -139,6 +139,12 @@ def create_app(agent_fn: Callable, robot_fn: Callable, mode_fn: Callable) -> Fas
 
     # Serve SPA — must be last so it doesn't shadow API routes
     static_dir = Path(__file__).parent / "static"
+    brand_assets_dir = Path(__file__).resolve().parents[2] / "assets"
+    docs_assets_dir = Path(__file__).resolve().parents[2] / "docs" / "assets"
+    if brand_assets_dir.exists():
+        app.mount("/brand-assets", StaticFiles(directory=str(brand_assets_dir)), name="brand-assets")
+    if docs_assets_dir.exists():
+        app.mount("/brand-docs", StaticFiles(directory=str(docs_assets_dir)), name="brand-docs")
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
     return app
