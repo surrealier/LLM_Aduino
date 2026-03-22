@@ -1,4 +1,5 @@
 """Tests for server.py orchestration functions (pure + mock-based)."""
+import builtins
 import signal
 import sys
 import unittest.mock as mock
@@ -368,7 +369,7 @@ def test_build_interrupt_handler_prints_stats_and_raises():
     perf = mock.Mock()
     handler = srv._build_interrupt_handler(perf)
 
-    with mock.patch("server.__import__") as import_mock:
+    with mock.patch.object(builtins, "__import__") as import_mock:
         fake_logger = mock.Mock()
         import_mock.return_value.getLogger.return_value = fake_logger
         try:

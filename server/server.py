@@ -24,7 +24,7 @@ from src.audio_processor import normalize_to_dbfs, qc, save_wav, trim_energy
 from src.connection_manager import build_connection_manager
 from src.input_gate import InputGate
 from src.job_queue import JobQueue
-from src.llm_client import LLMClient
+from src.llm_client import PriorityLLMClient
 from src.logging_setup import get_performance_logger, setup_logging
 from src.protocol import (
     PTYPE_AUDIO,
@@ -37,6 +37,7 @@ from src.protocol import (
     send_pong,
 )
 from src.robot_mode import RobotMode
+from src.runtime_controller import RuntimeController
 from src.stt_engine import STTEngine
 from src.voice_id import VoiceIDService
 from src.utils import clean_text
@@ -373,6 +374,7 @@ def handle_connection(
     config,
     voice_id_service: VoiceIDService | None = None,
     runtime_state: dict | None = None,
+    runtime_controller: RuntimeController | None = None,
 ):
     global current_mode, robot_handler, agent_handler
 
@@ -516,6 +518,16 @@ def handle_connection(
                     register_msg = voice_id_service.consume_sample(pcm)
                     if register_msg:
                         wav_bytes = agent_handler.text_to_audio(register_msg)
+                        if wav_bytes:
+                            _send_tts_chunks(conn, send_lock, [wav_bytes])
+                        input_gate.mark_idle()
+                        continue
+
+                if runtime_controller is not None:
+                    runtime_response = runtime_controller.handle_text_command(text)
+                    if runtime_response:
+                        log.info("Runtime command applied: %s", text)
+                        wav_bytes = agent_handler.text_to_audio(runtime_response)
                         if wav_bytes:
                             _send_tts_chunks(conn, send_lock, [wav_bytes])
                         input_gate.mark_idle()
@@ -782,39 +794,20 @@ def main():
     memory_dir = config.get("memory", "memory_dir", default="memory")
     memory_refresh_interval = int(config.get("memory", "refresh_interval", default=5))
 
-    # Create a single shared LLM client
+    # Create runtime preference controller + shared LLM client
     llm_config = config.get_llm_config()
-    provider = (llm_config.get("provider", "ollama") or "ollama").lower()
-    if provider == "ollama":
+    runtime_controller = RuntimeController(config)
+    if any(bucket in runtime_controller.preferences.llm_priority for bucket in ("ollama", "ollama_cpu")):
         ensure_ollama_running(llm_config.get("base_url", "http://localhost:11434"), llm_config)
 
-    api_key = ""
-    if provider == "chatgpt":
-        api_key = llm_config.get("openai_api_key") or os.getenv("OPENAI_API_KEY", "")
-    elif provider == "claude":
-        api_key = llm_config.get("anthropic_api_key") or os.getenv("ANTHROPIC_API_KEY", "")
-    elif provider == "gemini":
-        api_key = llm_config.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")
-
-    if provider in {"chatgpt", "claude", "gemini"} and not api_key:
-        log.warning(
-            "%s provider selected but API key is missing. Replies will return a configuration warning.",
-            provider,
-        )
-
-    llm_client = LLMClient(
-        base_url=llm_config.get("base_url", "http://localhost:11434"),
-        model=llm_config.get("model", "qwen2.5:0.5b"),
-        default_think=llm_config.get("think", False),
-        provider=provider,
-        api_key=api_key,
-    )
+    llm_client = PriorityLLMClient(llm_config, runtime_controller.preferences)
     log.info(
-        "LLM Client: %s (%s, default_think=%s)",
-        llm_client.base_url,
-        llm_client.model,
-        llm_client.default_think,
+        "LLM Runtime Priority: %s (API: %s)",
+        " > ".join(runtime_controller.preferences.llm_priority),
+        " > ".join(runtime_controller.preferences.api_priority),
     )
+    accelerators = runtime_controller.preferences.hardware.accelerators or ["cpu-only"]
+    log.info("Detected Accelerators: %s", ", ".join(accelerators))
 
     # Initialize mode handlers
     robot_handler = RobotMode(ACTIONS_CONFIG, llm_client)
@@ -836,7 +829,17 @@ def main():
         assistant_config.get("personality", "witty"),
     )
 
-    stt_engine = STTEngine(model_size=model_size, device=device, language=language)
+
+    stt_engine = STTEngine(
+        model_size=model_size,
+        device=device,
+        language=language,
+        device_priority=runtime_controller.preferences.resolved_stt_devices(),
+    )
+    runtime_controller.bind(llm_client=llm_client, stt_engine=stt_engine)
+    agent_handler.runtime_controller = runtime_controller
+    robot_handler.runtime_controller = runtime_controller
+
     warmup_status = _warm_up_runtime_assets(stt_engine, agent_handler)
     log.info(
         "Runtime warmup: stt_ready=%s tts_ready=%s",
@@ -885,7 +888,9 @@ def main():
             config,
             voice_id_service,
             runtime_state,
+            runtime_controller=runtime_controller,
         ),
+        connection_priority_provider=runtime_controller.get_connection_priority,
     )
     log.info("Server started. Default Mode: %s", current_mode)
     try:
@@ -898,3 +903,4 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

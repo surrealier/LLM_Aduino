@@ -8,6 +8,7 @@ from src.connection_manager import (
     ConnectionManager,
     SerialConnectionManager,
     SerialSocketAdapter,
+    _normalize_connection_priority,
     _iter_serial_candidates,
     build_connection_manager,
 )
@@ -128,3 +129,25 @@ def test_serial_socket_adapter_uses_relaxed_write_timeout():
     adapter = SerialSocketAdapter(fake, port_name="/dev/cu.test", timeout=0.5, write_timeout=5.0)
     assert fake.timeout == 0.5
     assert fake.write_timeout == 5.0
+
+
+def test_normalize_connection_priority_preserves_order_and_backfills():
+    assert _normalize_connection_priority("wifi > wired") == ["wifi", "wired"]
+    assert _normalize_connection_priority(["wired"]) == ["wired", "wifi"]
+
+
+def test_auto_connection_manager_uses_live_priority_order(monkeypatch):
+    manager = AutoConnectionManager(
+        "127.0.0.1",
+        5001,
+        lambda *_args: None,
+        connection_priority_provider=lambda: ["wifi", "wired"],
+    )
+    calls = []
+    expected = (object(), ("127.0.0.1", 5001))
+
+    monkeypatch.setattr(manager.serial_manager, "try_accept", lambda: calls.append("wired") or None)
+    monkeypatch.setattr(manager, "_try_accept_tcp", lambda: calls.append("wifi") or expected)
+
+    assert manager._accept_next_candidate() == expected
+    assert calls == ["wifi"]

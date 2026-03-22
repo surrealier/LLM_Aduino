@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from config_loader import get_config
+from ..app import get_agent
 from ..auth import require_auth
 
 router = APIRouter(prefix="/api/config", dependencies=[Depends(require_auth)])
@@ -46,4 +47,11 @@ def patch_config(body: ConfigPatch):
         raise HTTPException(status_code=404, detail=f"Unknown config section: {body.section}")
     section[body.key] = body.value
     cfg.save()
+    try:
+        agent = get_agent()
+        runtime_controller = getattr(agent, "runtime_controller", None)
+        if runtime_controller is not None:
+            runtime_controller.refresh_from_config(save=False)
+    except Exception:
+        pass
     return {"ok": True}

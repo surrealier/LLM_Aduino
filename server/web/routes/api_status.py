@@ -15,6 +15,11 @@ def get_status():
         conv_count = agent.conversation_count
         timers = agent.info_services.get_active_timers()
         alarms = agent.info_services.get_active_alarms()
+        runtime = (
+            agent.runtime_controller.status_snapshot()
+            if getattr(agent, "runtime_controller", None) is not None
+            else {}
+        )
     except Exception:
         emotion = "neutral"
         emotion_history = []
@@ -22,6 +27,7 @@ def get_status():
         conv_count = 0
         timers = []
         alarms = []
+        runtime = {}
 
     return {
         "mode": get_mode(),
@@ -31,4 +37,5 @@ def get_status():
         "proactive": proactive,
         "active_timers": timers,
         "active_alarms": alarms,
+        "runtime": runtime,
     }

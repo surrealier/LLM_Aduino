@@ -69,6 +69,7 @@
 - [x] (SA-3, DONE) firmware `device_secrets.h`와 키 이름/의미 1:1 동기화
 - [x] (SA-3, DONE) 설정 검증 에러를 행동 유도형 메시지로 통일
 - [x] (SA-3, DONE) USB serial wired 런타임 추가 및 `ccoli start` auto-detect 경로 구현
+- [x] (SA-3, DONE) ??? ????(`??/API/??/????`) ?? ?? ? ??/? ???? ??? ?? ??
 - 검증:
   - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest server/tests/test_cli_setup.py server/tests/test_cli_smoke.py`
   - `pytest server/tests/test_cli_integration.py -k config`

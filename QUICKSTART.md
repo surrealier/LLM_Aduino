@@ -84,7 +84,25 @@ colli config wifi MyHomeWiFi password MySecretPass port 5001
 After running, check `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` and set:
 - `SERVER_IP` to your PC/server LAN IP
 
-## 5. Current mode support
+## 5. Adjust runtime priority
+
+These can be spoken to the device or typed in the web chat:
+
+```text
+@@우선순위 상태
+모델 우선순위 ollama > api > ollama cpu > other
+api 우선순위 gemini > claude > chatgpt
+연결 우선순위 wired > wifi
+프로세서 우선순위 gpu > cpu
+```
+
+Notes:
+- `Wired > WiFi` is live in `auto` mode, so the server keeps checking both paths and connects to the first healthy link it finds.
+- `GPU > CPU` applies directly to STT and local-LLM preference ordering.
+- `ollama_cpu` is a separate runtime bucket, but it becomes a truly separate physical path only when you provide a CPU-only local Ollama instance.
+- Current TTS default is `edge_tts`, so processor priority is recorded and exposed, but Edge TTS itself does not select a local GPU/CPU backend.
+
+## 6. Current mode support
 
 - Agent mode: available
 - Robot mode: not available yet (Servo + Display integration in progress)
@@ -123,3 +141,8 @@ If local Docker is not available, run the same pipeline in GitHub Actions:
 ```bash
 python scripts/evaluate_poc.py --tool ralph
 ```
+
+## Web dashboard
+
+By default the server also serves a minimal green glass dashboard at http://localhost:8005 for live status, memory, schedules, chat, integrations, and logs.
+

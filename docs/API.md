@@ -24,8 +24,10 @@ This document describes the current runtime entrypoints and key server modules.
   - CMD/AUDIO_OUT send helpers
 - `server/src/connection_manager.py`
   - USB serial auto-detect + TCP listen/accept loop
+  - Live `Wired > WiFi` priority polling in `auto` mode
 - `server/src/stt_engine.py`
   - Whisper model load + transcription wrapper
+  - GPU/CPU device-priority fallback
 - `server/src/audio_processor.py`
   - Audio quality checks, trim, normalization
 - `server/src/agent_mode.py`
@@ -33,7 +35,13 @@ This document describes the current runtime entrypoints and key server modules.
 - `server/src/robot_mode.py`
   - Robot command parser (currently gated by feature flag)
 - `server/src/llm_client.py`
-  - Ollama HTTP client wrapper
+  - Multi-provider LLM wrapper
+  - Runtime-verified priority order: `ollama -> api -> ollama_cpu -> other`
+- `server/src/runtime_preferences.py`
+  - Runtime priority defaults, model resolution, hardware detection
+- `server/src/runtime_controller.py`
+  - Conversational priority commands such as `우선순위 상태`
+  - Live runtime reload for LLM/STT/connection preference changes
 - `server/src/input_gate.py`
   - Stream gating for turn-based processing
 - `server/src/job_queue.py`
@@ -43,6 +51,15 @@ This document describes the current runtime entrypoints and key server modules.
 
 - `server/config.yaml` (primary)
 - `server/.env` (optional overrides, see `server/env.example`)
+
+## Web API Notes
+
+- `GET /api/status`
+  - Returns the existing dashboard status payload
+  - Now also includes `runtime` with current model/network/processor priority state
+- `POST /api/chat`
+  - Regular agent chat
+  - Also accepts runtime-priority commands that would normally be spoken to the device
 
 ## Mode Availability
 

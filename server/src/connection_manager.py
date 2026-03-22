@@ -6,6 +6,7 @@ TCP 서버 연결 관리 모듈
 from __future__ import annotations
 
 import logging
+import select
 import socket
 import time
 from types import SimpleNamespace
@@ -37,6 +38,30 @@ _SERIAL_HINTS = (
     "ch340",
     "slab",
 )
+
+_DEFAULT_CONNECTION_PRIORITY = ("wired", "wifi")
+
+
+def _normalize_connection_priority(value) -> list[str]:
+    allowed = {"wired", "wifi"}
+    if isinstance(value, str):
+        raw_items = [item.strip().lower() for item in value.replace(">", ",").split(",") if item.strip()]
+    elif isinstance(value, (list, tuple)):
+        raw_items = [str(item).strip().lower() for item in value if str(item).strip()]
+    else:
+        raw_items = []
+
+    normalized: list[str] = []
+    for item in raw_items:
+        if item in allowed and item not in normalized:
+            normalized.append(item)
+
+    for item in _DEFAULT_CONNECTION_PRIORITY:
+        if item not in normalized:
+            normalized.append(item)
+    return normalized
+
+
 class SerialSocketAdapter:
     """Expose a pyserial connection through the subset of the socket API we use."""
 
@@ -335,6 +360,8 @@ class AutoConnectionManager:
         serial_baudrate: int = 115200,
         serial_scan_interval: float = 1.0,
         serial_initial_idle_timeout_s: float = 5.0,
+        connection_priority_provider: Callable[[], list[str]] | None = None,
+        poll_interval: float = 0.1,
     ):
         self.tcp_manager = ConnectionManager(host, port, handler, backlog=backlog, accept_backoff=accept_backoff)
         self.serial_manager = SerialConnectionManager(
@@ -345,35 +372,62 @@ class AutoConnectionManager:
             initial_idle_timeout_s=serial_initial_idle_timeout_s,
         )
         self.accept_backoff = accept_backoff
+        self.connection_priority_provider = connection_priority_provider or (lambda: list(_DEFAULT_CONNECTION_PRIORITY))
+        self.poll_interval = max(0.02, float(poll_interval))
 
     def start(self):
         srv = self.tcp_manager.start()
-        srv.settimeout(0.5)
+        srv.setblocking(False)
         return srv
+
+    def _current_connection_priority(self) -> list[str]:
+        return _normalize_connection_priority(self.connection_priority_provider())
+
+    def _try_accept_tcp(self):
+        server_socket = self.tcp_manager.server_socket
+        if server_socket is None:
+            return None
+
+        ready, _, _ = select.select([server_socket], [], [], 0.0)
+        if not ready:
+            return None
+        return server_socket.accept()
+
+    def _accept_next_candidate(self):
+        for transport in self._current_connection_priority():
+            if transport == "wired":
+                serial_result = self.serial_manager.try_accept()
+                if serial_result is not None:
+                    return serial_result
+                continue
+            if transport == "wifi":
+                tcp_result = self._try_accept_tcp()
+                if tcp_result is not None:
+                    return tcp_result
+        return None
 
     def accept_loop(self):
         if self.tcp_manager.server_socket is None:
             self.start()
 
         waiting_logged = False
+        last_priority = None
         while True:
-            if not waiting_logged:
-                log.info("Ready for next connection (auto: wired USB or Wi-Fi)...")
+            current_priority = self._current_connection_priority()
+            if not waiting_logged or current_priority != last_priority:
+                label = " > ".join(item.upper() for item in current_priority)
+                log.info("Ready for next connection (auto priority: %s)...", label)
                 waiting_logged = True
+                last_priority = current_priority
             try:
-                serial_result = self.serial_manager.try_accept()
-                if serial_result is not None:
-                    conn, addr = serial_result
-                    waiting_logged = False
-                    try:
-                        self.tcp_manager.handler(conn, addr)
-                    finally:
-                        conn.close()
-                        log.info("Disconnected: %s", addr)
+                accepted = self._accept_next_candidate()
+                if accepted is None:
+                    time.sleep(self.poll_interval)
                     continue
 
-                conn, addr = self.tcp_manager.server_socket.accept()
-            except socket.timeout:
+                conn, addr = accepted
+            except BlockingIOError:
+                time.sleep(self.poll_interval)
                 continue
             except KeyboardInterrupt:
                 break
@@ -396,7 +450,11 @@ class AutoConnectionManager:
                 time.sleep(0.1)
 
 
-def build_connection_manager(config, handler: Callable):
+def build_connection_manager(
+    config,
+    handler: Callable,
+    connection_priority_provider: Callable[[], list[str]] | None = None,
+):
     mode = (config.get("connection", "mode", default="auto") or "auto").lower()
     host = config.get("server", "host")
     port = config.get("server", "port")
@@ -407,6 +465,7 @@ def build_connection_manager(config, handler: Callable):
     serial_initial_idle_timeout_s = float(
         config.get("connection", "serial_initial_idle_timeout_s", default=max(5.0, socket_timeout * 10))
     )
+    connection_priority = config.get("connection", "priority", default=list(_DEFAULT_CONNECTION_PRIORITY))
 
     if mode == "wired":
         return SerialConnectionManager(
@@ -426,4 +485,6 @@ def build_connection_manager(config, handler: Callable):
         serial_baudrate=serial_baudrate,
         serial_scan_interval=serial_scan_interval,
         serial_initial_idle_timeout_s=serial_initial_idle_timeout_s,
+        connection_priority_provider=connection_priority_provider
+        or (lambda: _normalize_connection_priority(connection_priority)),
     )

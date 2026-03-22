@@ -17,7 +17,12 @@ class ChatMessage(BaseModel):
 @router.post("/")
 def chat(body: ChatMessage):
     agent = get_agent()
-    response, intent = agent.generate_response(body.text, speaker_id=body.speaker_id)
+    runtime_controller = getattr(agent, "runtime_controller", None)
+    runtime_response = runtime_controller.handle_text_command(body.text) if runtime_controller is not None else None
+    if runtime_response:
+        response, intent = runtime_response, "runtime_config"
+    else:
+        response, intent = agent.generate_response(body.text, speaker_id=body.speaker_id)
     emotion = agent.emotion_system.current_emotion
 
     # Broadcast chat event to WebSocket clients

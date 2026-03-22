@@ -5,6 +5,8 @@ from typing import Optional, Union
 
 import requests
 
+from .runtime_preferences import RuntimePreferences
+
 
 log = logging.getLogger(__name__)
 ThinkType = Optional[Union[bool, str]]
@@ -21,7 +23,8 @@ class LLMClient:
     ):
         self.provider = (provider or "ollama").strip().lower()
         self.api_key = api_key or ""
-        self.base_url = base_url.rstrip("/")
+        resolved_base_url = (base_url or "http://localhost:11434").strip()
+        self.base_url = resolved_base_url.rstrip("/")
         self.model = model
         self.default_think = default_think
         self.url = f"{self.base_url}/api/chat"
@@ -321,3 +324,205 @@ class LLMClient:
                 lines.append(f"ASSISTANT: {content}")
         lines.append("ASSISTANT:")
         return "\n".join(lines)
+
+
+class PriorityLLMClient:
+    def __init__(self, llm_config: dict, preferences: RuntimePreferences):
+        self.default_think = llm_config.get("think", False)
+        self.last_error_code = None
+        self.last_error = ""
+        self.provider = (llm_config.get("provider", "ollama") or "ollama").strip().lower()
+        self.base_url = llm_config.get("base_url", "http://localhost:11434").rstrip("/")
+        self.model = llm_config.get("model", "")
+        self.active_candidate = None
+        self._clients: dict[tuple[str, str, str], LLMClient] = {}
+        self.reload_runtime_preferences(preferences, llm_config)
+
+    def reload_runtime_preferences(self, preferences: RuntimePreferences, llm_config: dict):
+        self.preferences = preferences
+        self.llm_config = dict(llm_config or {})
+        self.default_think = self.llm_config.get("think", False)
+        resolved_base_url = (self.llm_config.get("base_url") or "http://localhost:11434").strip()
+        self.base_url = resolved_base_url.rstrip("/")
+        self.provider = (self.llm_config.get("provider", "ollama") or "ollama").strip().lower()
+        self.model = self.llm_config.get("model", "") or preferences.llm_models.get("ollama", "")
+
+    def _clear_error_state(self):
+        self.last_error_code = None
+        self.last_error = ""
+
+    def _remember_error(self, code: str | None, message: str):
+        self.last_error_code = code or "provider_error"
+        self.last_error = message
+
+    def _api_key_for_provider(self, provider: str) -> str:
+        mapping = {
+            "gemini": self.llm_config.get("gemini_api_key", ""),
+            "claude": self.llm_config.get("anthropic_api_key", ""),
+            "chatgpt": self.llm_config.get("openai_api_key", ""),
+        }
+        return mapping.get(provider, "") or ""
+
+    def _client_for_candidate(self, provider: str, model: str, api_key: str = "") -> LLMClient:
+        key = (provider, model, api_key)
+        client = self._clients.get(key)
+        if client is None:
+            client = LLMClient(
+                base_url=self.base_url,
+                model=model,
+                default_think=self.default_think,
+                provider=provider,
+                api_key=api_key,
+            )
+            self._clients[key] = client
+        return client
+
+    def _build_candidates(self) -> list[dict]:
+        candidates: list[dict] = []
+        for bucket in self.preferences.llm_priority:
+            if bucket == "ollama":
+                if not self.preferences.gpu_bucket_enabled():
+                    continue
+                candidates.append(
+                    {
+                        "bucket": bucket,
+                        "provider": "ollama",
+                        "model": self.preferences.llm_models["ollama"],
+                        "api_key": "",
+                        "processor": "gpu",
+                    }
+                )
+                continue
+
+            if bucket == "api":
+                for provider in self.preferences.api_priority:
+                    api_key = self._api_key_for_provider(provider)
+                    if not api_key:
+                        continue
+                    candidates.append(
+                        {
+                            "bucket": bucket,
+                            "provider": provider,
+                            "model": self.preferences.llm_models[provider],
+                            "api_key": api_key,
+                            "processor": "remote",
+                        }
+                    )
+                continue
+
+            if bucket == "ollama_cpu":
+                candidates.append(
+                    {
+                        "bucket": bucket,
+                        "provider": "ollama",
+                        "model": self.preferences.llm_models["ollama"],
+                        "api_key": "",
+                        "processor": "cpu",
+                    }
+                )
+                continue
+
+            if bucket == "other":
+                legacy_provider = self.provider
+                if legacy_provider == "ollama":
+                    candidates.append(
+                        {
+                            "bucket": bucket,
+                            "provider": "ollama",
+                            "model": self.preferences.llm_models["ollama"],
+                            "api_key": "",
+                            "processor": "gpu" if self.preferences.gpu_bucket_enabled() else "cpu",
+                        }
+                    )
+                elif legacy_provider in self.preferences.llm_models:
+                    api_key = self._api_key_for_provider(legacy_provider)
+                    if api_key:
+                        candidates.append(
+                            {
+                                "bucket": bucket,
+                                "provider": legacy_provider,
+                                "model": self.preferences.llm_models[legacy_provider],
+                                "api_key": api_key,
+                                "processor": "remote",
+                            }
+                        )
+
+        deduped: list[dict] = []
+        seen: set[tuple[str, str, str]] = set()
+        for candidate in candidates:
+            signature = (
+                candidate["bucket"],
+                candidate["provider"],
+                candidate["model"],
+            )
+            if signature in seen:
+                continue
+            seen.add(signature)
+            deduped.append(candidate)
+        return deduped
+
+    def chat(
+        self,
+        messages: list,
+        temperature: float = 0.8,
+        max_tokens: int = 256,
+        think: ThinkType = None,
+    ) -> str:
+        self._clear_error_state()
+        candidates = self._build_candidates()
+        if not candidates:
+            self._remember_error("unsupported_provider", "No runnable LLM candidate is configured")
+            return ""
+
+        errors = []
+        for candidate in candidates:
+            client = self._client_for_candidate(
+                candidate["provider"],
+                candidate["model"],
+                candidate["api_key"],
+            )
+            response = client.chat(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                think=think,
+            )
+            if response.strip():
+                self.provider = client.provider
+                self.model = client.model
+                self.base_url = client.base_url
+                self.active_candidate = {
+                    "bucket": candidate["bucket"],
+                    "provider": client.provider,
+                    "model": client.model,
+                    "processor": candidate["processor"],
+                }
+                self.last_error_code = None
+                self.last_error = ""
+                return response.strip()
+
+            errors.append(
+                f"{candidate['bucket']}:{candidate['provider']}({client.last_error_code or 'empty'})"
+            )
+            if client.last_error_code:
+                self.last_error_code = client.last_error_code
+                self.last_error = client.last_error
+            else:
+                self._remember_error("provider_error", f"{candidate['provider']} returned empty response")
+
+        if errors and not self.last_error:
+            self._remember_error("provider_error", ", ".join(errors))
+        return ""
+
+    def describe_runtime(self) -> dict:
+        return {
+            "configured_provider": (self.llm_config.get("provider", "ollama") or "ollama").strip().lower(),
+            "active_provider": (self.active_candidate or {}).get("provider"),
+            "active_model": (self.active_candidate or {}).get("model"),
+            "active_bucket": (self.active_candidate or {}).get("bucket"),
+            "active_processor": (self.active_candidate or {}).get("processor"),
+            "priority": list(self.preferences.llm_priority),
+            "api_priority": list(self.preferences.api_priority),
+            "base_url": self.base_url,
+            "last_error_code": self.last_error_code,
+        }

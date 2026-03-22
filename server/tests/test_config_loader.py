@@ -19,6 +19,10 @@ def test_defaults_when_no_yaml_exists(tmp_path):
     assert cfg.get("stt", "language") == "ko"
     assert cfg.get("connection", "mode") == "auto"
     assert cfg.get("connection", "serial_baudrate") == 115200
+    assert cfg.get("llm", "priority") == ["ollama", "api", "ollama_cpu", "other"]
+    assert cfg.get("llm", "api_priority") == ["gemini", "claude", "chatgpt"]
+    assert cfg.get("connection", "priority") == ["wired", "wifi"]
+    assert cfg.get("runtime", "processor_priority") == ["gpu", "cpu"]
 
 
 def test_load_yaml_overrides_defaults(tmp_path):

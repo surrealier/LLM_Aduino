@@ -10,6 +10,7 @@ import sys
 import threading
 import ctypes
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 from faster_whisper import WhisperModel
@@ -25,7 +26,13 @@ class STTEngine:
     - Whisper 모델 로딩 및 관리
     - 스레드 안전한 음성 인식 처리
     """
-    def __init__(self, model_size: str, device: str, language: str = "ko"):
+    def __init__(
+        self,
+        model_size: str,
+        device: str,
+        language: str = "ko",
+        device_priority: Sequence[str] | None = None,
+    ):
         """
         STT 엔진 초기화
         - model_size: Whisper 모델 크기 (tiny, base, small, medium, large)
@@ -38,6 +45,30 @@ class STTEngine:
         self.model_lock = threading.Lock()  # 모델 접근 동기화를 위한 락
         self.model = None
         self.device_in_use = None
+        self.device_priority = self._normalize_device_priority(device_priority or [device, "cpu"])
+
+    @staticmethod
+    def _normalize_device_priority(devices: Sequence[str]) -> list[str]:
+        normalized: list[str] = []
+        for item in devices:
+            value = str(item).strip().lower()
+            if not value or value in normalized:
+                continue
+            normalized.append(value)
+        if "cpu" not in normalized:
+            normalized.append("cpu")
+        return normalized
+
+    def set_device_priority(self, devices: Sequence[str]):
+        normalized = self._normalize_device_priority(devices)
+        if normalized == self.device_priority:
+            return
+
+        self.device_priority = normalized
+        self.device = normalized[0]
+        if self.device_in_use not in normalized:
+            self.model = None
+            self.device_in_use = None
 
     def load_model(self, device: str):
         """
@@ -192,11 +223,17 @@ class STTEngine:
         - GPU 로드 실패 시 CPU로 자동 폴백
         """
         if self.model is None:
-            try:
-                self.load_model(self.device)
-            except Exception as exc:
-                log.warning("GPU init failed -> fallback CPU: %s", exc)
-                self.load_model("cpu")
+            last_exc = None
+            for device in self.device_priority:
+                try:
+                    self.load_model(device)
+                    self.device = device
+                    return
+                except Exception as exc:
+                    last_exc = exc
+                    log.warning("STT init failed on %s -> trying next fallback: %s", device, exc)
+            if last_exc is not None:
+                raise last_exc
 
     def safe_transcribe(self, pcm_f32: np.ndarray):
         """
@@ -239,12 +276,22 @@ class STTEngine:
             except RuntimeError as exc:
                 msg = str(exc)
                 if str(self.device_in_use).startswith("cuda") and self._is_cuda_runtime_error(msg):
-                    log.error("CUDA runtime missing/broken -> switching to CPU now. reason=%s", msg)
+                    log.error("CUDA runtime missing/broken -> switching to next fallback now. reason=%s", msg)
                     if "cublas64_12.dll" in msg:
                         log.error(
                             "Detected CUDA 12 runtime mismatch. "
                             "Install CUDA 12 cublas/cudnn runtime for ctranslate2>=4."
                         )
-                    self.load_model("cpu")
-                    return _run()
+                    current = str(self.device_in_use or "").lower()
+                    for device in self.device_priority:
+                        normalized_device = str(device).lower()
+                        if (
+                            normalized_device == current
+                            or (current.startswith("cuda") and normalized_device.startswith("cuda"))
+                        ):
+                            continue
+                        self.load_model(device)
+                        self.device = device
+                        return _run()
+                    raise
                 raise

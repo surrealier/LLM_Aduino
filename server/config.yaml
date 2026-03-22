@@ -7,13 +7,28 @@ stt:
   language: ko
 llm:
   provider: gemini
-  base_url: ''
+  base_url: http://localhost:11434
   model: gemini-2.5-flash
+  ollama_model: qwen2.5:0.5b
+  api_models:
+    gemini: gemini-2.5-flash
+    claude: claude-3-5-haiku-latest
+    chatgpt: gpt-4o-mini
+  priority:
+  - ollama
+  - api
+  - ollama_cpu
+  - other
+  api_priority:
+  - gemini
+  - claude
+  - chatgpt
   think: false
   auto_start: true
   start_command: ollama serve
   startup_timeout: 10.0
 tts:
+  backend: edge_tts
   voice: ko-KR-SunHiNeural
 assistant:
   name: ccoli
@@ -65,11 +80,18 @@ logging:
   log_dir: logs
 connection:
   mode: auto
+  priority:
+  - wired
+  - wifi
   socket_timeout: 0.5
   serial_port: auto
   serial_baudrate: 115200
   serial_scan_interval: 1.0
   serial_initial_idle_timeout_s: 5.0
+runtime:
+  processor_priority:
+  - gpu
+  - cpu
 queue:
   stt_maxsize: 4
   tts_maxsize: 2

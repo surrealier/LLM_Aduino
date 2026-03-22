@@ -118,6 +118,7 @@ flowchart LR
 
 - 🗣️ **Voice-first** — speak naturally, get voice responses
 - 🧠 **Multi-LLM** — Ollama (local, default), Gemini, Claude, ChatGPT
+- 🧭 **Runtime priority routing** — checks model, network, and processor candidates in order and only falls back after a higher-priority path is confirmed unavailable
 - 🔌 **Integrations** — weather, calendar, search, maps, notifications
 - 🎙️ **Voice ID** — speaker recognition to personalize responses
 - 🤖 **Robot mode** *(coming soon)* — servo/display control via voice
@@ -139,6 +140,37 @@ ccoli config llm --provider chatgpt --model gpt-4o-mini --api-key <OPENAI_API_KE
 ```
 
 Ollama is auto-installed and auto-started if missing.
+
+</details>
+
+<details>
+<summary><b>Runtime Priority</b></summary>
+
+`ccoli` now keeps runtime priority as first-class config:
+
+```yaml
+llm:
+  priority: [ollama, api, ollama_cpu, other]
+  api_priority: [gemini, claude, chatgpt]
+connection:
+  priority: [wired, wifi]
+runtime:
+  processor_priority: [gpu, cpu]
+```
+
+You can change the same priorities during a conversation or in the web chat:
+
+```text
+@@우선순위 상태
+모델 우선순위 ollama > api > ollama cpu > other
+api 우선순위 gemini > claude > chatgpt
+연결 우선순위 wired > wifi
+프로세서 우선순위 gpu > cpu
+```
+
+When `connection.mode` is `auto`, the server keeps checking both `Wired` and `WiFi` live and binds to the first healthy link that appears while still honoring the current priority order.
+
+`ollama_cpu` is a distinct fallback bucket in runtime policy, but a single shared Ollama server cannot be forced to switch GPU/CPU per request. To make that bucket physically separate, point it at a dedicated CPU-only local Ollama instance.
 
 </details>
 
@@ -238,3 +270,8 @@ ccoli/
 ## 📜 License
 
 This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+
+## Web dashboard
+
+Open http://localhost:8005 for the minimal green glass dashboard that surfaces status, memory, schedules, chat, integrations, and live logs.
+
