@@ -23,7 +23,10 @@ static const char* s_ssid = nullptr;
 static const char* s_pass = nullptr;
 
 bool connection_is_wired_mode() {
-  return CONNECTION_MODE && strcmp(CONNECTION_MODE, "wired") == 0;
+  if (!CONNECTION_MODE) return true;
+  if (strcmp(CONNECTION_MODE, "wired") == 0) return true;
+  if (strcmp(CONNECTION_MODE, "auto") == 0) return !SSID || strlen(SSID) == 0;
+  return false;
 }
 
 bool connection_debug_logging_enabled() {
