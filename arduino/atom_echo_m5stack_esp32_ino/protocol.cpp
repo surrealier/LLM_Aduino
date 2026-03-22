@@ -211,7 +211,7 @@ static void handleAudioOut(const uint8_t* payload, uint16_t len) {
   if (audio_ring_buffer == nullptr) {
     audio_ring_buffer = (uint8_t*)malloc(audio_ring_size);
     if (!audio_ring_buffer) {
-      Serial.println("[AUDIO_OUT] Ring buffer alloc failed!");
+      if (!g_serial_mode) Serial.println("[AUDIO_OUT] Ring buffer alloc failed!");
       return;
     }
     audio_ring_head = 0;
@@ -343,7 +343,10 @@ void protocol_init() {
 // protocol_send_packet — 패킷 1개 송신
 // 헤더(3B)를 단일 write로 전송, 페이로드는 재시도 루프로 완전 전송 보장.
 // 전송 실패(write 반환 0) 시 연결 종료.
-bool protocol_send_packet(WiFiClient& client, uint8_t type, const uint8_t* payload, uint16_t len) {
+// g_serial_mode: Serial 전송 모드일 때 true (main .ino에서 정의)
+extern bool g_serial_mode;
+
+bool protocol_send_packet(Client& client, uint8_t type, const uint8_t* payload, uint16_t len) {
   if (!client.connected()) return false;
 
   // 헤더: [type 1B][length_lo 1B][length_hi 1B]
@@ -368,7 +371,7 @@ bool protocol_send_packet(WiFiClient& client, uint8_t type, const uint8_t* paylo
 // protocol_poll — 서버에서 수신된 패킷을 폴링하여 핸들러에 디스패치
 // 상태머신: RX_TYPE → RX_LEN0 → RX_LEN1 → RX_PAYLOAD → 핸들러 → RX_TYPE
 // 페이로드 단계에서는 벌크 읽기(client.read(buf, n))로 성능 최적화
-void protocol_poll(WiFiClient& client) {
+void protocol_poll(Client& client) {
   if (!client.connected()) return;
 
   while (client.available() > 0) {
@@ -477,7 +480,7 @@ void protocol_poll(WiFiClient& client) {
 
 // protocol_send_ping_if_needed — PING_INTERVAL_MS마다 keepalive 전송
 // millis() 래핑(49.7일)에 안전한 unsigned 뺄셈 사용
-void protocol_send_ping_if_needed(WiFiClient& client) {
+void protocol_send_ping_if_needed(Client& client) {
   uint32_t now = millis();
   if (now - last_ping_ms >= PING_INTERVAL_MS) {
     if (protocol_send_packet(client, PTYPE_PING, nullptr, 0))
@@ -510,7 +513,7 @@ void protocol_audio_process() {
         audio_ring_tail = (audio_ring_tail + audio_ring_size - chunk_size) % audio_ring_size;
         uint32_t now = millis();
         if (now - last_playraw_fail_ms >= 500) {
-          Serial.println("[AUDIO_PROC] playRaw queue full; retry next cycle");
+          if (!g_serial_mode) Serial.println("[AUDIO_PROC] playRaw queue full; retry next cycle");
           last_playraw_fail_ms = now;
         }
       }

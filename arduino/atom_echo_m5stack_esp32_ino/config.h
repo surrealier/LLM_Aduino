@@ -53,6 +53,10 @@ extern const uint16_t SERVER_PORT;
 // Connection settings
 #define WIFI_RECONNECT_INTERVAL_MS 5000
 #define PING_INTERVAL_MS 3000
+// WiFi 연결 타임아웃: 이 시간 안에 WiFi가 안 붙으면 USB Serial로 전환
+#define WIFI_CONNECT_TIMEOUT_MS 12000
+// USB Serial 데이터 전송 속도 (USB CDC는 실제 속도가 USB에 의해 결정되나 명시적 설정 필요)
+#define SERIAL_BAUD_RATE 921600
 
 // LED colors (RGB)
 #define LED_COLOR_CONNECTING_R 255

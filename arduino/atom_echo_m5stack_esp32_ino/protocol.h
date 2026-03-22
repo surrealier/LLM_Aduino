@@ -12,7 +12,7 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#include <WiFi.h>
+#include <Client.h>
 #include <stdint.h>
 
 // ── 패킷 타입 상수 ──
@@ -31,13 +31,13 @@ static constexpr uint8_t PTYPE_PONG      = 0x1F;  // 핑 응답 (선택적)
 static constexpr uint8_t PTYPE_BUFFER_STATUS = 0x13;  // 버퍼 상태 보고 (미구현)
 
 // ── 공개 API ──
-void protocol_init();                          // 수신 상태머신 초기화
-bool protocol_send_packet(WiFiClient& client,  // 패킷 송신 (헤더+페이로드)
+void protocol_init();                       // 수신 상태머신 초기화
+bool protocol_send_packet(Client& client,   // 패킷 송신 (헤더+페이로드) — WiFi & Serial 공용
                           uint8_t type,
                           const uint8_t* payload,
                           uint16_t len);
-void protocol_poll(WiFiClient& client);        // 수신 패킷 폴링 및 디스패치
-void protocol_send_ping_if_needed(WiFiClient& client);  // 주기적 PING 전송
+void protocol_poll(Client& client);         // 수신 패킷 폴링 및 디스패치 — WiFi & Serial 공용
+void protocol_send_ping_if_needed(Client& client);  // 주기적 PING 전송
 void protocol_audio_process();                 // 링 버퍼 → 스피커 재생 처리
 bool protocol_is_audio_playing();              // TTS 재생 중 여부
 void protocol_clear_audio_buffer();            // TTS 버퍼 즉시 비우기 (인터럽트)

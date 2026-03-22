@@ -35,7 +35,7 @@ void preroll_push(PrerollBuffer* pr, const int16_t* x, size_t n) {
 // 순환 버퍼이므로 full일 때는 두 번에 나눠 전송:
 //   1) pos ~ PREROLL_SAMPLES-1 (오래된 부분)
 //   2) 0 ~ pos-1 (최신 부분)
-void preroll_send(PrerollBuffer* pr, WiFiClient& client) {
+void preroll_send(PrerollBuffer* pr, Client& client) {
   size_t count = pr->full ? PREROLL_SAMPLES : pr->pos;
   if (count == 0) return;
 

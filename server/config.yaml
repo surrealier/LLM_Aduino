@@ -12,7 +12,7 @@ stt:
 llm:
   provider: "ollama"          # ollama, gemini, claude, chatgpt
   base_url: "http://localhost:11434"
-  model: "qwen3:8b"
+  model: "qwen3.5:9b"
   think: false
   auto_start: true
   start_command: "ollama serve"

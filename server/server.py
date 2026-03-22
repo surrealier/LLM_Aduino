@@ -22,6 +22,7 @@ from config_loader import get_config
 from src.agent_mode import AgentMode
 from src.audio_processor import normalize_to_dbfs, qc, save_wav, trim_energy
 from src.connection_manager import ConnectionManager
+from src.serial_connection_manager import SerialConnectionManager
 from src.input_gate import InputGate
 from src.job_queue import JobQueue
 from src.llm_client import LLMClient
@@ -625,10 +626,18 @@ def main():
     perf_logger = get_performance_logger()
     signal.signal(signal.SIGINT, lambda *_: perf_logger.print_stats())
 
+    _handler = lambda conn, addr: handle_connection(conn, addr, stt_engine, config, voice_id_service)
+
+    # USB 시리얼 리스너 — WiFi TCP와 병렬로 실행 (daemon thread)
+    serial_manager = SerialConnectionManager(handler=_handler)
+    serial_thread = threading.Thread(target=serial_manager.accept_loop, daemon=True)
+    serial_thread.start()
+    log.info("Serial listener started (auto-detecting ESP32 port)")
+
     conn_manager = ConnectionManager(
         host=host,
         port=port,
-        handler=lambda conn, addr: handle_connection(conn, addr, stt_engine, config, voice_id_service),
+        handler=_handler,
     )
     log.info("Server started. Default Mode: %s", current_mode)
     conn_manager.accept_loop()
