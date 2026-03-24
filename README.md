@@ -147,6 +147,21 @@ ccoli config wifi MyHomeWiFi password MySecretPass port 5001
 
 Then set `SERVER_IP` in `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h` to your PC's local IP and upload again.
 
+### 5. Optional Telegram bot chat
+
+If you enabled the Telegram channel in `server/.env`, you can start chatting from Telegram as well:
+
+1. Open `@BotFather` and confirm your bot's `username`
+2. Search that `username` in Telegram
+3. Open the bot chat and tap `Start`, or send `/start`
+4. Send a normal message such as `안녕`
+5. If the server is running, ccoli replies through the bot
+
+Tips:
+- If you changed `server/.env` after starting the server, restart `ccoli start`
+- If `TELEGRAM_ALLOWED_CHAT_IDS` is blank, the first chat is not blocked by the allow-list
+- Full setup guide: `docs/TELEGRAM_CHANNEL_GUIDE.md`
+
 🎉 That's it — speak to the Atom Echo and hear the response!
 
 ## 🏗️ How It Works
