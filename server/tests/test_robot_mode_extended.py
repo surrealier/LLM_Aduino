@@ -1,4 +1,5 @@
 """Extended Robot mode tests — actions, clamping, invalid JSON, mode switch."""
+from emotion_system import EmotionSystem
 from src.robot_mode import RobotMode
 
 
@@ -68,3 +69,46 @@ def test_switch_mode_action():
     _, action = robot.process_with_llm("모드 전환", current_angle=90)
     assert action["action"] == "SWITCH_MODE"
     assert action["mode"] == "agent"
+
+
+def test_build_robot_payload_legacy_direct_default():
+    robot = RobotMode([], None)
+    payload = robot.build_robot_payload("happy", "다녀와")
+    assert payload["action"] == "ROBOT_EMOTION"
+    assert payload["transport"] == "local"
+    assert payload["servo_action"] == "bounce_happy"
+
+
+def test_build_robot_payload_companion_uart_profile():
+    robot = RobotMode(
+        [],
+        None,
+        robot_config={
+            "controller": "companion_uart",
+            "servo": {"count": 4},
+            "display": {"type": "st7789v2_240x280"},
+            "emotion": {"persist_sec": 1200},
+        },
+    )
+    payload = robot.build_robot_payload("sad", "미안해도 아직 조금 삐졌어")
+    assert payload["action"] == "ROBOT_STATE"
+    assert payload["controller"] == "companion_uart"
+    assert payload["transport"] == "uart"
+    assert payload["profile"]["servo_count"] == 4
+    assert payload["profile"]["display"] == "st7789v2_240x280"
+    assert payload["emotion"] == "sad"
+    assert payload["emotion_state"]["persist_sec"] == 1200
+    assert payload["face"] == "sad"
+
+
+def test_generate_emotion_response_keeps_lingering_mood():
+    emotion_system = EmotionSystem()
+    emotion_system.analyze_emotion("너 진짜 싫어")
+
+    llm = _FakeLLM(["[emotion:happy] 다녀와. 조심해!"])
+    robot = RobotMode([], llm, emotion_system=emotion_system)
+
+    clean_text, emotion, payload = robot.generate_emotion_response("미안해")
+    assert clean_text == "다녀와. 조심해!"
+    assert emotion in {"angry", "sad"}
+    assert payload["emotion"] == emotion

@@ -77,6 +77,7 @@ class AgentMode:
         tts_voice=None,
         memory_dir=None,
         memory_refresh_interval=5,
+        emotion_system=None,
     ):
         self.llm = llm_client
         self.tts_voice = tts_voice or "ko-KR-SunHiNeural"
@@ -95,7 +96,7 @@ class AgentMode:
         )
 
         # 서브시스템 초기화
-        self.emotion_system = EmotionSystem()
+        self.emotion_system = emotion_system or EmotionSystem()
         self.info_services = InfoServices(weather_api_key, lat=lat, lon=lon)
         self.integrations = IntegrationRegistry()
         self.integrations.register(WeatherIntegration(weather_api_key, lat=lat, lon=lon), enabled=True)
@@ -424,7 +425,8 @@ class AgentMode:
                 if schedule_response:
                     info_context = schedule_response if isinstance(schedule_response, str) else str(schedule_response)
 
-            detected_emotion = self.emotion_system.analyze_emotion(text)
+            self.emotion_system.set_body_state(sleep_mode=self.proactive.sleep_mode)
+            detected_emotion = self.emotion_system.analyze_emotion(text, speaker_id=speaker_id or "default")
 
             history = self._history_for_user(speaker_id)
 
@@ -460,8 +462,9 @@ class AgentMode:
             if intent == "sleep":
                 self.proactive.sleep_mode = True
                 self.proactive.sleep_until = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+                self.emotion_system.set_body_state(sleep_mode=True, fatigue=1.0)
 
-            response_emotion = self.emotion_system.analyze_emotion(response)
+            response_emotion = self.emotion_system.analyze_emotion(response, speaker_id=speaker_id or "default")
             history.append(
                 {
                     "role": "assistant",

@@ -15,6 +15,7 @@
 #include "connection.h"
 #include "config.h"
 #include "led_control.h"
+#include "robot_bridge.h"
 #include "servo_control.h"
 #include "display_control.h"
 #include <M5Unified.h>
@@ -362,6 +363,27 @@ static void handleCmdJson(const uint8_t* payload, uint16_t len) {
   if (has_action && strcmp(action, "MIC_UNLOCK") == 0) {
     capture_locked = false;
     capture_lock_waiting_for_playback = false;
+    return;
+  }
+
+  // ── ROBOT_STATE: companion-forward first, local fallback second ──
+  if (has_action && strcmp(action, "ROBOT_STATE") == 0) {
+    if (robot_bridge_ready()) {
+      robot_bridge_forward_json(json);
+    }
+
+    char face[32] = {0};
+    char display_text[32] = {0};
+    json_get_string(json, "face", face, sizeof(face));
+    json_get_string(json, "display_text", display_text, sizeof(display_text));
+
+    display_show_face(face_from_string(face));
+    if (display_text[0]) display_set_status_text(display_text);
+
+    ServoAction sa = action_from_string(servo_action);
+    if (sa != ACTION_NONE) servo_play_action(sa);
+
+    led_show_emotion(emotion);
     return;
   }
 

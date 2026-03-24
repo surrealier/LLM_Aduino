@@ -30,6 +30,7 @@
 | SA-5 Voice ID | 화자 등록/식별/게이트 | Voice ID 기능 안정화 + 테스트 |
 | SA-6 Channel Expansion | Telegram 기반 iOS 채널 | Bot 연동 MVP + 운영 가이드 |
 | SA-7 Dev Productivity | 도구 PoC/자동화 | Ralph PoC 리포트 |
+| SA-8 Robot Mode | Companion 기반 로봇 모드 | 로봇 PRD, bridge protocol, companion firmware, 하드웨어 가이드 |
 
 ---
 
@@ -123,6 +124,18 @@
   - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest server/tests/test_runtime_controller.py server/tests/test_runtime_preferences.py`
   - `docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from server-test`
 
+### EPIC-J: Robot Mode Re-Architecture (PRD 5.6)
+- [ ] (SA-0, TODO) Atom Echo/SG90/Waveshare 공식 문서 기반 제약과 권장 아키텍처를 `docs/PRD.md` 및 `docs/ROBOT_MODE_WAVESHARE_PRD.md`에 고정
+- [ ] (SA-2/SA-8, TODO) `server -> Atom Echo -> Companion` 로봇 상태 페이로드와 회귀 시나리오를 정의하고 protocol test에 편입
+- [ ] (SA-8, TODO) `arduino/robot_companion_controller/` 신규 펌웨어 스켈레톤과 ST7789V2 + SG90(1~4채널) 드라이버 구조를 확정
+- [ ] (SA-5/SA-8, TODO) `SOUL + RELATION + MOOD + AFFECT + BODY` 기반 감정 지속 모델과 idle action policy를 설계/테스트
+- [ ] (SA-8, TODO) farewell/sleep/idle gesture preset과 display state machine(blink/gaze/yawn/talk overlay)을 구현
+- [ ] (SA-1/SA-2/SA-8, TODO) Docker 검증 명령과 실기 하드웨어 smoke checklist를 단일 실행 계획으로 문서화
+- 검증:
+  - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest server/tests/test_emotion_system.py server/tests/test_robot_mode_extended.py`
+  - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest server/tests/test_protocol.py`
+  - `docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from server-test`
+
 ---
 
 ## 4) 실행 순서 (권장 스프린트)
@@ -151,6 +164,13 @@
   - Telegram 채널 E2E smoke 통과
   - 도구 도입 의사결정 리포트 완료
 
+### Sprint 5 (Robot Mode)
+- SA-0, SA-2, SA-5, SA-8 수행: Companion 구조 확정 + 감정 지속 엔진 + 디스플레이/서보 제어
+- Exit Criteria:
+  - Atom Echo 단독 직결 대신 Companion 기반 배선/프로토콜이 문서와 설정에 반영됨
+  - insult -> apology lingering mood 시나리오가 단위 테스트로 재현됨
+  - ST7789V2 display state machine과 1~4채널 servo profile이 하드웨어 smoke checklist를 통과함
+
 ---
 
 ## 5) 공통 Definition of Ready / Done
@@ -172,3 +192,4 @@
 - 외부 API 변동: mock-services와 표준 오류코드로 회귀 안정성 확보
 - 채널 확장 복잡도: Telegram MVP로 범위 제한 후 iOS 앱은 인터페이스 추상화 우선
 - 도구 도입 리스크: PoC 결과 기반 점진 적용, 런타임 경로 직접 치환 금지
+- 로봇 하드웨어 제약: Atom Echo 단독 핀/전원 한계를 전제로 Companion 구조를 조기에 확정하고, direct path는 레거시 fallback으로만 유지
