@@ -353,8 +353,14 @@ class RuntimeController:
         if stt_device:
             pieces.append(f"STT\ub294 \uc9c0\uae08 {stt_device}\ub85c \ub3d9\uc791 \uc911\uc774\uc5d0\uc694.")
 
+        hardware = runtime.get("hardware") or {}
+        if hardware.get("platform") == "darwin" and hardware.get("mps_available"):
+            pieces.append(
+                "macOS에서 MPS는 감지됐지만 현재 STT 백엔드는 CPU/CUDA만 지원해서 STT에는 직접 쓰지 못해요."
+            )
+
         if not runtime.get("tts_processor_selectable", False):
-            pieces.append("\ud604\uc7ac TTS\ub294 Edge TTS\ub77c \ub85c\uceec GPU/CPU \uc6b0\uc120\uc21c\uc704\ub97c \uc9c1\uc811 \uc801\uc6a9\ud558\uc9c0\ub294 \ubabb\ud574\uc694.")
+            pieces.append("현재 TTS는 Edge TTS라 로컬 GPU/CPU/MPS 선택을 직접 적용하지는 못해요.")
 
         return " ".join(pieces)
 

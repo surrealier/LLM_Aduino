@@ -4,8 +4,10 @@ Main ESP32 voice streaming server module
 - Supports robot mode and agent mode
 - Sends commands and voice responses over TCP socket communication
 """
+import logging
 import os
 import signal
+import socket
 import threading
 import time
 import subprocess
@@ -61,6 +63,75 @@ current_mode = "agent"  # Default mode: agent
 # Mode handler instances
 robot_handler = None
 agent_handler = None
+_OPTIONAL_WEB_MODULES = {"uvicorn", "fastapi", "starlette", "pydantic"}
+
+
+def _utc_now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _describe_connection_addr(addr) -> tuple[str | None, str | None]:
+    if isinstance(addr, tuple) and len(addr) >= 2:
+        if addr[0] == "serial":
+            return "wired", str(addr[1])
+        host = str(addr[0])
+        port = addr[1]
+        return "wifi", f"{host}:{port}"
+    return None, None
+
+
+def _make_dashboard_runtime_state() -> dict:
+    return {
+        "connection_greeting_sent": False,
+        "warmup": {
+            "stt_ready": False,
+            "tts_ready": False,
+        },
+        "connection": {
+            "connected": False,
+            "current_transport": None,
+            "current_endpoint": None,
+            "last_transport": None,
+            "last_endpoint": None,
+            "last_connected_at": None,
+            "last_disconnected_at": None,
+        },
+        "last_checks": {},
+    }
+
+
+def _set_dashboard_warmup_state(runtime_state: dict | None, warmup_status: dict) -> None:
+    if runtime_state is None:
+        return
+    runtime_state["warmup"] = {
+        "stt_ready": bool(warmup_status.get("stt_ready", False)),
+        "tts_ready": bool(warmup_status.get("tts_ready", False)),
+        "updated_at": _utc_now_iso(),
+    }
+
+
+def _set_dashboard_connection_state(
+    runtime_state: dict | None,
+    *,
+    connected: bool,
+    addr=None,
+) -> None:
+    if runtime_state is None:
+        return
+
+    connection = runtime_state.setdefault("connection", {})
+    connection["connected"] = bool(connected)
+    if connected:
+        transport, endpoint = _describe_connection_addr(addr)
+        connection["current_transport"] = transport
+        connection["current_endpoint"] = endpoint
+        connection["last_transport"] = transport
+        connection["last_endpoint"] = endpoint
+        connection["last_connected_at"] = _utc_now_iso()
+    else:
+        connection["current_transport"] = None
+        connection["current_endpoint"] = None
+        connection["last_disconnected_at"] = _utc_now_iso()
 
 
 def _build_interrupt_handler(perf_logger):
@@ -90,6 +161,110 @@ def load_commands_config(path: str = "commands.yaml"):
         ACTIONS_CONFIG = []
 
 
+def _discover_local_ip_addresses() -> list[str]:
+    addresses: list[str] = []
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 80))
+            candidate = sock.getsockname()[0]
+            if candidate and not candidate.startswith("127."):
+                addresses.append(candidate)
+    except OSError:
+        pass
+
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET):
+            candidate = info[4][0]
+            if candidate and not candidate.startswith("127.") and candidate not in addresses:
+                addresses.append(candidate)
+    except OSError:
+        pass
+
+    return addresses
+
+
+def _build_dashboard_urls(host: str, port: int) -> list[str]:
+    normalized_host = str(host or "").strip().lower()
+    display_hosts: list[str] = []
+
+    if normalized_host in {"", "0.0.0.0", "::"}:
+        display_hosts.append("localhost")
+        display_hosts.extend(_discover_local_ip_addresses())
+    elif normalized_host in {"127.0.0.1", "localhost"}:
+        display_hosts.append("localhost")
+    else:
+        display_hosts.append(str(host).strip())
+
+    urls: list[str] = []
+    for item in display_hosts:
+        formatted_host = item
+        if ":" in formatted_host and not formatted_host.startswith("["):
+            formatted_host = f"[{formatted_host}]"
+        url = f"http://{formatted_host}:{int(port)}"
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+def _runtime_install_hint() -> str:
+    return "Run `ccoli setup` or `python3 -m pip install -e .[runtime]` from the repo root."
+
+
+def _is_optional_web_dependency_error(exc: ModuleNotFoundError) -> bool:
+    return (getattr(exc, "name", "") or "") in _OPTIONAL_WEB_MODULES
+
+
+def _start_web_dashboard(
+    web_cfg: dict,
+    *,
+    agent_fn,
+    robot_fn,
+    mode_fn,
+    dashboard_state_fn=None,
+    start_web_server_fn=None,
+    configure_auth_fn=None,
+    install_log_handler_fn=None,
+) -> list[str]:
+    if not web_cfg.get("enabled", True):
+        return []
+
+    log = logging.getLogger("server")
+
+    try:
+        if start_web_server_fn is None:
+            from web import start_web_server as start_web_server_fn
+        if configure_auth_fn is None:
+            from web.auth import configure as configure_auth_fn
+        if install_log_handler_fn is None:
+            from web.log_handler import install as install_log_handler_fn
+
+        install_log_handler_fn(max_lines=int(web_cfg.get("log_tail_lines", 200)))
+        configure_auth_fn(web_cfg.get("auth_token", "") or "")
+        start_web_server_fn(
+            agent_fn=agent_fn,
+            robot_fn=robot_fn,
+            mode_fn=mode_fn,
+            dashboard_state_fn=dashboard_state_fn,
+            host=web_cfg.get("host", "0.0.0.0"),
+            port=int(web_cfg.get("port", 8005)),
+        )
+    except ModuleNotFoundError as exc:
+        if _is_optional_web_dependency_error(exc):
+            log.warning(
+                "Web dashboard disabled because optional dependency `%s` is not installed.",
+                exc.name,
+            )
+            log.warning(_runtime_install_hint())
+            return []
+        raise
+
+    return _build_dashboard_urls(
+        web_cfg.get("host", "0.0.0.0"),
+        int(web_cfg.get("port", 8005)),
+    )
+
+
 def _ollama_health_check(base_url: str, timeout: float = 1.0) -> bool:
     try:
         parsed = urllib.parse.urlparse(base_url)
@@ -116,7 +291,7 @@ def _normalize_start_command(start_command):
 
 
 def ensure_ollama_running(base_url: str, llm_config: dict):
-    log = __import__("logging").getLogger("server")
+    log = logging.getLogger("server")
     if _ollama_health_check(base_url):
         log.info("Ollama already running at %s", base_url)
         return True
@@ -382,6 +557,7 @@ def handle_connection(
     perf_logger = get_performance_logger()
 
     log.info("Connected: %s", addr)
+    _set_dashboard_connection_state(runtime_state, connected=True, addr=addr)
     conn.settimeout(config.get("connection", "socket_timeout", default=0.5))
     try:
         conn.setsockopt(1, 9, 1)
@@ -765,6 +941,7 @@ def handle_connection(
     worker_thread.join(timeout=2)
     if connection_greeting_thread is not None:
         connection_greeting_thread.join(timeout=0.2)
+    _set_dashboard_connection_state(runtime_state, connected=False)
     log.info("Connection closed: %s", addr)
 
 
@@ -808,6 +985,8 @@ def main():
     )
     accelerators = runtime_controller.preferences.hardware.accelerators or ["cpu-only"]
     log.info("Detected Accelerators: %s", ", ".join(accelerators))
+    for note in runtime_controller.preferences.audio_runtime_notes():
+        log.info("Runtime note: %s", note)
 
     # Initialize mode handlers
     robot_handler = RobotMode(ACTIONS_CONFIG, llm_client)
@@ -840,7 +1019,9 @@ def main():
     agent_handler.runtime_controller = runtime_controller
     robot_handler.runtime_controller = runtime_controller
 
+    runtime_state = _make_dashboard_runtime_state()
     warmup_status = _warm_up_runtime_assets(stt_engine, agent_handler)
+    _set_dashboard_warmup_state(runtime_state, warmup_status)
     log.info(
         "Runtime warmup: stt_ready=%s tts_ready=%s",
         warmup_status["stt_ready"],
@@ -860,24 +1041,18 @@ def main():
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, interrupt_handler)
 
-    runtime_state = {"connection_greeting_sent": False}
-
-    # Web dashboard
     web_cfg = config.config.get("web", {})
-    if web_cfg.get("enabled", True):
-        from web import start_web_server
-        from web.auth import configure as configure_auth
-        from web.log_handler import install as install_log_handler
-        install_log_handler(max_lines=int(web_cfg.get("log_tail_lines", 200)))
-        configure_auth(web_cfg.get("auth_token", "") or "")
-        start_web_server(
-            agent_fn=lambda: agent_handler,
-            robot_fn=lambda: robot_handler,
-            mode_fn=lambda: current_mode,
-            host=web_cfg.get("host", "0.0.0.0"),
-            port=int(web_cfg.get("port", 8005)),
-        )
-        log.info("Web dashboard: http://localhost:%s", web_cfg.get("port", 8005))
+    dashboard_urls = _start_web_dashboard(
+        web_cfg,
+        agent_fn=lambda: agent_handler,
+        robot_fn=lambda: robot_handler,
+        mode_fn=lambda: current_mode,
+        dashboard_state_fn=lambda: runtime_state,
+    )
+    for url in dashboard_urls:
+        log.info("Web dashboard: %s", url)
+    if dashboard_urls:
+        log.info("Web API docs: %s/api/docs", dashboard_urls[0])
 
     conn_manager = build_connection_manager(
         config,
@@ -903,4 +1078,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

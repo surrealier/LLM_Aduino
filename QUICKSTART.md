@@ -11,7 +11,8 @@ The bootstrap script installs the lightweight CLI first, then opens `ccoli setup
 - `Cloud API` (`gemini`, `claude`, `chatgpt`)
 - `Configure Later`
 
-On macOS, the setup flow defaults STT to `cpu` and skips unused heavy packages like `torch` / `transformers`.
+On macOS, the setup flow defaults STT to `cpu`.
+The current STT path (`faster-whisper`) does not use Apple `MPS`, and the default TTS backend (`edge_tts`) also does not use local MPS/GPU acceleration.
 
 If you want to run onboarding again later:
 
@@ -52,6 +53,7 @@ ccoli start
 
 Then connect the Atom Echo to your PC with USB-C.
 - The server preloads STT and TTS during startup so the first turn avoids the cold-start model penalty.
+- If the web dashboard is enabled and its dependencies are installed, startup logs print the dashboard URL(s) and the `/api/docs` link.
 - LED status: red before the server link is ready, light green once the server connection is healthy.
 - On the first healthy connection, ccoli plays a short contextual welcome greeting.
 
@@ -59,6 +61,12 @@ Optional temporary port override:
 
 ```bash
 ccoli start --port 5002
+```
+
+If startup says the web dashboard dependency is missing, reinstall the runtime extras from the repo root:
+
+```bash
+python3 -m pip install -e .[runtime]
 ```
 
 ## 4. Optional Wi-Fi mode
@@ -99,6 +107,7 @@ api 우선순위 gemini > claude > chatgpt
 Notes:
 - `Wired > WiFi` is live in `auto` mode, so the server keeps checking both paths and connects to the first healthy link it finds.
 - `GPU > CPU` applies directly to STT and local-LLM preference ordering.
+- On macOS, `GPU` priority can still matter for local LLM routing, but the current STT/TTS stack does not run on Apple `MPS`.
 - `ollama_cpu` is a separate runtime bucket, but it becomes a truly separate physical path only when you provide a CPU-only local Ollama instance.
 - Current TTS default is `edge_tts`, so processor priority is recorded and exposed, but Edge TTS itself does not select a local GPU/CPU backend.
 
@@ -144,5 +153,5 @@ python scripts/evaluate_poc.py --tool ralph
 
 ## Web dashboard
 
-By default the server also serves a minimal green glass dashboard at http://localhost:8005 for live status, memory, schedules, chat, integrations, and logs.
-
+By default the server also serves a minimal green glass dashboard at `http://localhost:8005` for live status, memory, schedules, chat, integrations, and logs.
+When the server binds to `0.0.0.0`, startup logs also print a LAN URL if one is detected.

@@ -169,12 +169,17 @@ class HardwareProfile:
     def cuda_available(self) -> bool:
         return "cuda" in self.accelerators
 
+    @property
+    def mps_available(self) -> bool:
+        return "mps" in self.accelerators
+
     def to_dict(self) -> dict:
         return {
             "platform": self.platform,
             "accelerators": list(self.accelerators),
             "gpu_available": self.gpu_available,
             "cuda_available": self.cuda_available,
+            "mps_available": self.mps_available,
         }
 
 
@@ -244,6 +249,32 @@ class RuntimePreferences:
     def gpu_bucket_enabled(self) -> bool:
         return "gpu" in self.processor_priority and self.hardware.gpu_available
 
+    @staticmethod
+    def stt_supported_devices() -> list[str]:
+        return ["cuda", "cpu"]
+
+    def audio_runtime_notes(self) -> list[str]:
+        notes: list[str] = []
+
+        if self.hardware.platform == "darwin":
+            if self.hardware.mps_available:
+                notes.append(
+                    "macOS MPS was detected, but the current STT backend "
+                    "uses faster-whisper with CPU/CUDA only, so STT stays on CPU."
+                )
+            else:
+                notes.append(
+                    "On macOS the current STT backend uses CPU in this project "
+                    "because the faster-whisper path does not use MPS here."
+                )
+
+        if self.tts_backend in {"edge_tts", "edge-tts"}:
+            notes.append(
+                "Current TTS backend is Edge TTS, so it does not use local GPU, CPU, or MPS selection."
+            )
+
+        return notes
+
     def to_dict(self) -> dict:
         return {
             "llm_priority": list(self.llm_priority),
@@ -252,6 +283,10 @@ class RuntimePreferences:
             "processor_priority": list(self.processor_priority),
             "llm_models": dict(self.llm_models),
             "hardware": self.hardware.to_dict(),
+            "stt_supported_devices": self.stt_supported_devices(),
+            "stt_mps_supported": False,
             "tts_backend": self.tts_backend,
+            "tts_mps_supported": False,
             "tts_processor_selectable": self.tts_backend not in {"edge_tts", "edge-tts"},
+            "audio_runtime_notes": self.audio_runtime_notes(),
         }

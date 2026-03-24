@@ -68,6 +68,53 @@ def test_ensure_auto_start_disabled():
         assert srv.ensure_ollama_running("http://localhost:11434", {"auto_start": False}) is False
 
 
+def test_start_web_dashboard_returns_local_and_lan_urls():
+    with mock.patch.object(srv, "_discover_local_ip_addresses", return_value=["192.168.0.24"]):
+        urls = srv._start_web_dashboard(
+            {
+                "enabled": True,
+                "host": "0.0.0.0",
+                "port": 8005,
+                "auth_token": "",
+                "log_tail_lines": 50,
+            },
+            agent_fn=lambda: None,
+            robot_fn=lambda: None,
+            mode_fn=lambda: "agent",
+            start_web_server_fn=lambda **kwargs: mock.sentinel.thread,
+            configure_auth_fn=lambda token: None,
+            install_log_handler_fn=lambda max_lines: None,
+        )
+
+    assert urls == [
+        "http://localhost:8005",
+        "http://192.168.0.24:8005",
+    ]
+
+
+def test_start_web_dashboard_skips_optional_dependency_error():
+    def _missing(**kwargs):
+        raise ModuleNotFoundError("No module named 'uvicorn'", name="uvicorn")
+
+    urls = srv._start_web_dashboard(
+        {
+            "enabled": True,
+            "host": "127.0.0.1",
+            "port": 8005,
+            "auth_token": "",
+            "log_tail_lines": 50,
+        },
+        agent_fn=lambda: None,
+        robot_fn=lambda: None,
+        mode_fn=lambda: "agent",
+        start_web_server_fn=_missing,
+        configure_auth_fn=lambda token: None,
+        install_log_handler_fn=lambda max_lines: None,
+    )
+
+    assert urls == []
+
+
 # ── load_commands_config ─────────────────────────────────────
 
 def test_load_commands_valid(tmp_path):

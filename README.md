@@ -35,6 +35,10 @@ No cloud required. Runs with local Ollama out of the box, or connect to Gemini /
 | 🔌 | **USB-C cable** | Default wired mode, auto-detected by the server |
 | 📶 | **Same Wi-Fi network** | Optional wireless mode |
 
+Official Atom Echo links:
+- Product docs: [M5Stack Atom Echo](https://docs.m5stack.com/en/atom/atomecho)
+- Official store: [ATOM Echo Smart Speaker Development Kit](https://shop.m5stack.com/products/atom-echo-smart-speaker-dev-kit)
+
 ## 🚀 Quick Start
 
 ### 1. Install
@@ -56,6 +60,12 @@ If you want to rerun onboarding later:
 
 ```bash
 ccoli setup
+```
+
+If startup later says the web dashboard dependency is missing, reinstall the runtime extras from the repo root:
+
+```bash
+python3 -m pip install -e .[runtime]
 ```
 
 Local repo / development path:
@@ -82,6 +92,40 @@ Optional robot/display mode:
 - Install Arduino libraries `Adafruit SSD1306` and `Adafruit GFX Library`
 - Connect an external SSD1306 OLED to `G25` (SDA) and `G21` (SCL)
 
+<details>
+<summary><b>First-Time Arduino IDE Setup (ESP32 + Atom Echo)</b></summary>
+
+If this is your first ESP32 project, use this order:
+
+1. Install Arduino IDE 2.x from the official Arduino site.
+2. Open `Arduino IDE -> Settings` and add this Board Manager URL:
+   `https://static-cdn.m5stack.com/resource/arduino/package_m5stack_index.json`
+3. Open `Boards Manager` and install `esp32` by `Espressif Systems`.
+4. Still in `Boards Manager`, install the `M5Stack` board package so the Atom board profiles appear cleanly in Arduino IDE.
+5. Open `Library Manager` and install:
+   - `M5Unified`
+   - `ESP32Servo`
+   - `Adafruit SSD1306` by Adafruit
+   - `Adafruit GFX Library` by Adafruit
+6. When Arduino IDE asks to install dependent libraries for `M5Unified`, choose `Install All`.
+7. Connect the Atom Echo with a USB-C data cable, then check `Tools -> Port` and confirm a serial device appears.
+8. In `Tools -> Board`, select an Atom-compatible target. For the original Atom Echo, start with `M5Atom`.
+9. Open `arduino/atom_echo_m5stack_esp32_ino/atom_echo_m5stack_esp32_ino.ino`, compile once, then upload.
+10. If the board is not recognized:
+    - Reconnect with a known data-capable USB cable
+    - Try another USB port
+    - Restart Arduino IDE after board/library installation
+    - Install the official Silicon Labs driver: [CP210x USB to UART Bridge VCP Drivers](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers)
+11. If you only want default wired mode, you can upload without creating `device_secrets.h`.
+12. If you want Wi-Fi mode later, run `ccoli config wifi ...` and then set `SERVER_IP` in `arduino/atom_echo_m5stack_esp32_ino/device_secrets.h`.
+
+Notes:
+- `M5Unified` is the key firmware dependency for the current sketch.
+- `ESP32Servo` is currently included by the firmware, so install it even if you are not using robot mode yet.
+- `Adafruit SSD1306` and `Adafruit GFX Library` are only needed for the optional external OLED display flow.
+
+</details>
+
 ### 3. Start
 
 ```bash
@@ -90,8 +134,10 @@ ccoli start
 
 Then connect the Atom Echo to your PC with USB-C.
 - The server preloads STT and TTS once during startup so the first spoken turn does not pay the full model warmup cost.
+- When the web dashboard is enabled, startup logs print the dashboard URL(s) and the `/api/docs` link.
 - LED status: red while waiting for the server link, light green when the device is connected and ready.
 - On the first healthy connection, ccoli speaks a short welcome line that picks up the recent conversation context when possible.
+- On macOS, the current STT path uses `faster-whisper`, so STT stays on `cpu` rather than Apple `MPS`. The default TTS backend `edge_tts` also does not use local MPS/GPU acceleration.
 
 ### 4. Optional Wi-Fi mode
 
@@ -123,6 +169,65 @@ flowchart LR
 - 🎙️ **Voice ID** — speaker recognition to personalize responses
 - 🤖 **Robot mode** *(coming soon)* — servo/display control via voice
 - 🐳 **Docker tests** — reproducible test suite out of the box
+
+## 🖥️ Terminal UI Flow
+
+`ccoli` already has a terminal-first onboarding flow with Rich panels and tables. It is not a full-screen ncurses app, but it behaves like a lightweight TUI for install/setup tasks.
+
+Typical flow:
+- Run `ccoli setup`
+- Pick your AI path: `Ollama Local`, `Cloud API`, or `Configure Later`
+- If needed, pick the provider and model
+- Pick the STT device (`cpu` on macOS by default)
+- Review the generated setup plan in the terminal
+- Confirm, then start with `ccoli start`
+
+Example session:
+
+```text
+$ ccoli setup
+┌─ ccoli Setup ─────────────────────────────────────┐
+│ Choose how ccoli should install and configure     │
+│ your AI runtime.                                  │
+└───────────────────────────────────────────────────┘
+
+Choose your AI path
+  1. ollama  - Local model on your machine via Ollama
+  2. api     - Gemini / Claude / ChatGPT via API key
+  3. manual  - Install runtime now and configure later
+Select [1]: 2
+
+Choose your cloud provider
+  1. gemini  - Google Gemini
+  2. claude  - Anthropic Claude
+  3. chatgpt - OpenAI ChatGPT
+Select [1]: 1
+
+Model name [gemini-1.5-flash]:
+Choose STT device
+  1. cpu   - Best default for macOS and general compatibility
+  2. cuda  - Use NVIDIA CUDA when available
+Select [1]: 1
+
+Setup Plan
+- Install target: api
+- Provider: gemini
+- Model: gemini-1.5-flash
+- STT device: cpu
+- Python extras: runtime
+Continue with this setup plan? [Y/n]: y
+
+$ ccoli start
+...
+Runtime warmup: stt_ready=True tts_ready=True
+Web dashboard: http://localhost:8005
+Web API docs: http://localhost:8005/api/docs
+```
+
+Useful terminal commands after setup:
+- `ccoli config integration list`
+- `ccoli config voice-id status`
+- `ccoli start --port 5002`
 
 ## ⚙️ Configuration
 
@@ -171,6 +276,8 @@ api 우선순위 gemini > claude > chatgpt
 When `connection.mode` is `auto`, the server keeps checking both `Wired` and `WiFi` live and binds to the first healthy link that appears while still honoring the current priority order.
 
 `ollama_cpu` is a distinct fallback bucket in runtime policy, but a single shared Ollama server cannot be forced to switch GPU/CPU per request. To make that bucket physically separate, point it at a dedicated CPU-only local Ollama instance.
+
+On macOS, `GPU` priority can still matter for local LLM routing, but the current STT/TTS stack does not run on Apple `MPS`.
 
 </details>
 
@@ -274,4 +381,3 @@ This project is licensed under the [GNU Affero General Public License v3.0](LICE
 ## Web dashboard
 
 Open http://localhost:8005 for the minimal green glass dashboard that surfaces status, memory, schedules, chat, integrations, and live logs.
-

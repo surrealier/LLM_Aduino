@@ -178,12 +178,15 @@ def _print_setup_banner() -> None:
     if console and Panel is not None:
         console.print(Panel.fit(message, title="ccoli Setup", border_style="green"))
         if sys.platform == "darwin":
-            console.print("[bold cyan]macOS tip:[/bold cyan] defaulting STT to CPU and skipping torch/transformers.")
+            console.print(
+                "[bold cyan]macOS tip:[/bold cyan] defaulting STT to CPU. "
+                "The current STT/TTS path does not use local MPS acceleration."
+            )
         return
     print("== ccoli Setup ==")
     print(message)
     if sys.platform == "darwin":
-        print("macOS tip: defaulting STT to CPU and skipping torch/transformers.")
+        print("macOS tip: defaulting STT to CPU. The current STT/TTS path does not use local MPS acceleration.")
 
 
 def _default_stt_device() -> str:
