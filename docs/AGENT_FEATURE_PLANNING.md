@@ -110,6 +110,19 @@
 - 검증:
   - `python scripts/evaluate_poc.py --tool ralph`
 
+### EPIC-I: Web Dashboard Redesign (PRD 5.1)
+- [ ] (SA-0/SA-3, TODO) 대시보드 범위를 PRD/Planning에 반영하고 `English` 기본 UI + `한국어/日本語/中文` 전환 정책 확정
+- [ ] (SA-3, TODO) `server/web/static/`를 HTML shell + 분리된 CSS/JS asset 구조로 재편
+- [ ] (SA-3, TODO) 개요 화면을 짧은 제목/보조 본문 구조로 재설계하고 브로콜리 마스코트 이미지는 메인 hero 1곳에만 유지
+- [ ] (SA-3, TODO) Diagnostics 탭을 추가해 Runtime Summary / STT / Connection / Integrations / Advanced 섹션으로 재구성
+- [ ] (SA-3, TODO) STT `device`, `model_size`와 Connection `mode`만 안전한 편집 대상으로 제한한 curated config UI 추가
+- [ ] (SA-3, TODO) `GET /api/diagnostics/`, `POST /api/diagnostics/check`와 대시보드 공유 runtime state를 추가
+- [ ] (SA-1/SA-3, TODO) 정적 UI 테스트와 diagnostics API 테스트를 보강하고 Docker 진입점으로 회귀 검증
+- 검증:
+  - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest server/tests/test_web_dashboard_static.py server/tests/test_web_runtime_routes.py`
+  - `docker compose -f docker/docker-compose.test.yml run --rm server-test pytest server/tests/test_runtime_controller.py server/tests/test_runtime_preferences.py`
+  - `docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from server-test`
+
 ---
 
 ## 4) 실행 순서 (권장 스프린트)

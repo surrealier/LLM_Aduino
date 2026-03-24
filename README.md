@@ -380,4 +380,4 @@ This project is licensed under the [GNU Affero General Public License v3.0](LICE
 
 ## Web dashboard
 
-Open http://localhost:8005 for the minimal green glass dashboard that surfaces status, memory, schedules, chat, integrations, and live logs.
+Open http://localhost:8005 for the multilingual dashboard with `English` as the default UI, optional `한국어 / 日本語 / 中文` switching, a diagnostics-first runtime view, editable memory/schedules/chat, and live logs.

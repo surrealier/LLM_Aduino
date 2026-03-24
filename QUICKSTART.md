@@ -164,5 +164,5 @@ python scripts/evaluate_poc.py --tool ralph
 
 ## Web dashboard
 
-By default the server also serves a minimal green glass dashboard at `http://localhost:8005` for live status, memory, schedules, chat, integrations, and logs.
+By default the server also serves a multilingual dashboard at `http://localhost:8005` with `English` as the default UI, optional `한국어 / 日本語 / 中文` switching, runtime diagnostics, memory/schedule/chat views, and live logs.
 When the server binds to `0.0.0.0`, startup logs also print a LAN URL if one is detected.
