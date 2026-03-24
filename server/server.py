@@ -23,6 +23,7 @@ import yaml
 from config_loader import get_config
 from src.agent_mode import AgentMode
 from src.audio_processor import normalize_to_dbfs, qc, save_wav, trim_energy
+from src.channels import TelegramBotAdapter, TelegramBotClient, TelegramChannelService, TelegramPollingWorker
 from src.connection_manager import build_connection_manager
 from src.input_gate import InputGate
 from src.job_queue import JobQueue
@@ -213,6 +214,62 @@ def _runtime_install_hint() -> str:
 
 def _is_optional_web_dependency_error(exc: ModuleNotFoundError) -> bool:
     return (getattr(exc, "name", "") or "") in _OPTIONAL_WEB_MODULES
+
+
+def _telegram_respond(agent, runtime_controller, chat_id: str, text: str) -> str:
+    runtime_response = runtime_controller.handle_text_command(text) if runtime_controller is not None else None
+    if runtime_response:
+        return runtime_response
+
+    response, _intent = agent.generate_response(text, speaker_id=f"telegram:{chat_id}")
+    return response
+
+
+def _start_telegram_channel(
+    telegram_cfg: dict,
+    *,
+    agent,
+    runtime_controller,
+    client_cls=TelegramBotClient,
+    adapter_cls=TelegramBotAdapter,
+    service_cls=TelegramChannelService,
+    worker_cls=TelegramPollingWorker,
+):
+    enabled = bool(telegram_cfg.get("enabled", False))
+    if not enabled:
+        return None
+
+    log = logging.getLogger("server")
+    bot_token = str(telegram_cfg.get("bot_token", "") or "").strip()
+    if not bot_token:
+        log.warning("Telegram channel enabled but TELEGRAM_BOT_TOKEN is missing; skipping startup.")
+        return None
+
+    allowed_chat_ids = {
+        str(chat_id).strip()
+        for chat_id in telegram_cfg.get("allowed_chat_ids", [])
+        if str(chat_id).strip()
+    }
+
+    client = client_cls(bot_token=bot_token)
+    adapter = adapter_cls(client)
+    service = service_cls(
+        adapter=adapter,
+        allowed_chat_ids=allowed_chat_ids,
+        min_interval_sec=float(telegram_cfg.get("min_interval_sec", 0.5) or 0.5),
+    )
+    worker = worker_cls(
+        client=client,
+        channel_service=service,
+        llm_respond=lambda chat_id, text: _telegram_respond(agent, runtime_controller, chat_id, text),
+        poll_interval_sec=float(telegram_cfg.get("poll_interval_sec", 1.0) or 1.0),
+        long_poll_timeout_sec=float(telegram_cfg.get("long_poll_timeout_sec", 20.0) or 20.0),
+    )
+    worker.start()
+
+    allow_list_label = str(len(allowed_chat_ids)) if allowed_chat_ids else "all"
+    log.info("Telegram channel started (allow-list=%s, poll=%.1fs)", allow_list_label, worker.poll_interval_sec)
+    return worker
 
 
 def _start_web_dashboard(
@@ -1054,6 +1111,13 @@ def main():
     if dashboard_urls:
         log.info("Web API docs: %s/api/docs", dashboard_urls[0])
 
+    telegram_cfg = config.get_telegram_config() if hasattr(config, "get_telegram_config") else config.get("telegram", default={})
+    telegram_worker = _start_telegram_channel(
+        telegram_cfg,
+        agent=agent_handler,
+        runtime_controller=runtime_controller,
+    )
+
     conn_manager = build_connection_manager(
         config,
         handler=lambda conn, addr: handle_connection(
@@ -1073,6 +1137,11 @@ def main():
     except KeyboardInterrupt:
         log.info("Server shutdown complete.")
         return 130
+    finally:
+        if telegram_worker is not None:
+            telegram_worker.stop()
+            telegram_worker.join(timeout=2.0)
+            telegram_worker.close()
     return 0
 
 

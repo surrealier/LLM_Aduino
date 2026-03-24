@@ -44,3 +44,21 @@ def test_runtime_priority_env_overrides_are_normalized(monkeypatch):
     assert cfg.get("runtime", "processor_priority") == ["cpu", "gpu"]
     assert cfg.get("llm", "ollama_model") == "qwen2.5:1.5b"
     assert cfg.get("llm", "api_models", "gemini") == "gemini-2.5-flash"
+
+
+def test_telegram_env_overrides_are_loaded(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:abc")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42,-100987654321")
+    monkeypatch.setenv("TELEGRAM_MIN_INTERVAL_SEC", "1.5")
+    monkeypatch.setenv("TELEGRAM_POLL_INTERVAL_SEC", "2.0")
+    monkeypatch.setenv("TELEGRAM_LONG_POLL_TIMEOUT_SEC", "15.0")
+
+    cfg = Config(config_file="missing.yaml")
+
+    assert cfg.get("telegram", "enabled") is True
+    assert cfg.get("telegram", "bot_token") == "123456:abc"
+    assert cfg.get("telegram", "allowed_chat_ids") == ["42", "-100987654321"]
+    assert cfg.get("telegram", "min_interval_sec") == 1.5
+    assert cfg.get("telegram", "poll_interval_sec") == 2.0
+    assert cfg.get("telegram", "long_poll_timeout_sec") == 15.0

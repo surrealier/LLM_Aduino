@@ -116,6 +116,17 @@ Notes:
 - Agent mode: available
 - Robot mode: not available yet (Servo + Display integration in progress)
 
+## 7. Optional Telegram bot channel
+
+If you want to chat with ccoli from Telegram as well as the ESP32/web UI:
+
+1. Create a bot with `@BotFather`
+2. Add Telegram settings to `server/.env`
+3. Start the server with `ccoli start`
+4. Send a message to your bot in Telegram
+
+Reference:
+- Telegram setup guide: `docs/TELEGRAM_CHANNEL_GUIDE.md`
 
 
 ## References

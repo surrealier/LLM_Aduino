@@ -115,6 +115,89 @@ def test_start_web_dashboard_skips_optional_dependency_error():
     assert urls == []
 
 
+def test_telegram_respond_prefers_runtime_controller():
+    runtime_controller = mock.Mock()
+    runtime_controller.handle_text_command.return_value = "runtime-updated"
+    agent = mock.Mock()
+
+    response = srv._telegram_respond(agent, runtime_controller, "42", "@@우선순위 상태")
+
+    assert response == "runtime-updated"
+    agent.generate_response.assert_not_called()
+
+
+def test_telegram_respond_uses_agent_with_chat_scoped_speaker_id():
+    runtime_controller = mock.Mock()
+    runtime_controller.handle_text_command.return_value = None
+    agent = mock.Mock()
+    agent.generate_response.return_value = ("안녕하세요", "chat")
+
+    response = srv._telegram_respond(agent, runtime_controller, "42", "안녕")
+
+    assert response == "안녕하세요"
+    agent.generate_response.assert_called_once_with("안녕", speaker_id="telegram:42")
+
+
+def test_start_telegram_channel_builds_and_starts_worker():
+    class _FakeClient:
+        def __init__(self, bot_token):
+            self.bot_token = bot_token
+
+    class _FakeAdapter:
+        def __init__(self, client):
+            self.client = client
+
+    class _FakeService:
+        def __init__(self, adapter, allowed_chat_ids, min_interval_sec):
+            self.adapter = adapter
+            self.allowed_chat_ids = allowed_chat_ids
+            self.min_interval_sec = min_interval_sec
+
+    class _FakeWorker:
+        def __init__(self, client, channel_service, llm_respond, poll_interval_sec, long_poll_timeout_sec):
+            self.client = client
+            self.channel_service = channel_service
+            self.llm_respond = llm_respond
+            self.poll_interval_sec = poll_interval_sec
+            self.long_poll_timeout_sec = long_poll_timeout_sec
+            self.started = False
+
+        def start(self):
+            self.started = True
+            return True
+
+    runtime_controller = mock.Mock()
+    runtime_controller.handle_text_command.return_value = None
+    agent = mock.Mock()
+    agent.generate_response.return_value = ("응답", "chat")
+
+    worker = srv._start_telegram_channel(
+        {
+            "enabled": True,
+            "bot_token": "123:abc",
+            "allowed_chat_ids": ["42", "99"],
+            "min_interval_sec": 1.5,
+            "poll_interval_sec": 2.0,
+            "long_poll_timeout_sec": 15.0,
+        },
+        agent=agent,
+        runtime_controller=runtime_controller,
+        client_cls=_FakeClient,
+        adapter_cls=_FakeAdapter,
+        service_cls=_FakeService,
+        worker_cls=_FakeWorker,
+    )
+
+    assert worker is not None
+    assert worker.started is True
+    assert worker.client.bot_token == "123:abc"
+    assert worker.channel_service.allowed_chat_ids == {"42", "99"}
+    assert worker.channel_service.min_interval_sec == 1.5
+    assert worker.poll_interval_sec == 2.0
+    assert worker.long_poll_timeout_sec == 15.0
+    assert worker.llm_respond("42", "테스트") == "응답"
+
+
 # ── load_commands_config ─────────────────────────────────────
 
 def test_load_commands_valid(tmp_path):

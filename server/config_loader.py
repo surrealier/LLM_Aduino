@@ -26,6 +26,40 @@ from src.runtime_preferences import (
 log = logging.getLogger("config_loader")
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        raw_items = value.replace("\n", ",").split(",")
+    elif isinstance(value, (list, tuple, set)):
+        raw_items = list(value)
+    else:
+        raw_items = [value]
+
+    items: list[str] = []
+    for item in raw_items:
+        normalized = str(item).strip()
+        if normalized and normalized not in items:
+            items.append(normalized)
+    return items
+
+
 class Config:
     """
     Configuration manager class
@@ -122,6 +156,14 @@ class Config:
             "enabled": False,
             "threshold": 0.72,
         },
+        "telegram": {
+            "enabled": False,
+            "bot_token": "",
+            "allowed_chat_ids": [],
+            "min_interval_sec": 0.5,
+            "poll_interval_sec": 1.0,
+            "long_poll_timeout_sec": 20.0,
+        },
         "web": {
             "enabled": True,
             "host": "0.0.0.0",
@@ -205,6 +247,24 @@ class Config:
                 self.config.setdefault("integrations", {}).setdefault("notify-slack", {})["api_key"] = os.environ["SLACK_BOT_TOKEN"]
             if "GOOGLE_MAPS_API_KEY" in os.environ:
                 self.config.setdefault("integrations", {}).setdefault("maps", {})["api_key"] = os.environ["GOOGLE_MAPS_API_KEY"]
+            if "TELEGRAM_ENABLED" in os.environ:
+                self.config.setdefault("telegram", {})["enabled"] = _coerce_bool(os.environ["TELEGRAM_ENABLED"])
+            if "TELEGRAM_BOT_TOKEN" in os.environ:
+                self.config.setdefault("telegram", {})["bot_token"] = os.environ["TELEGRAM_BOT_TOKEN"]
+            if "TELEGRAM_ALLOWED_CHAT_IDS" in os.environ:
+                self.config.setdefault("telegram", {})["allowed_chat_ids"] = _normalize_string_list(
+                    os.environ["TELEGRAM_ALLOWED_CHAT_IDS"]
+                )
+            if "TELEGRAM_MIN_INTERVAL_SEC" in os.environ:
+                self.config.setdefault("telegram", {})["min_interval_sec"] = float(os.environ["TELEGRAM_MIN_INTERVAL_SEC"])
+            if "TELEGRAM_POLL_INTERVAL_SEC" in os.environ:
+                self.config.setdefault("telegram", {})["poll_interval_sec"] = float(
+                    os.environ["TELEGRAM_POLL_INTERVAL_SEC"]
+                )
+            if "TELEGRAM_LONG_POLL_TIMEOUT_SEC" in os.environ:
+                self.config.setdefault("telegram", {})["long_poll_timeout_sec"] = float(
+                    os.environ["TELEGRAM_LONG_POLL_TIMEOUT_SEC"]
+                )
             if "VOICE_ID_ENABLED" in os.environ:
                 self.config.setdefault("voice_id", {})["enabled"] = os.environ["VOICE_ID_ENABLED"].lower() in {"1", "true", "yes", "on"}
             if "VOICE_ID_THRESHOLD" in os.environ:
@@ -302,6 +362,14 @@ class Config:
             DEFAULT_PROCESSOR_PRIORITY,
         )
 
+        telegram_cfg = self.config.setdefault("telegram", {})
+        telegram_cfg["enabled"] = _coerce_bool(telegram_cfg.get("enabled"), False)
+        telegram_cfg["bot_token"] = str(telegram_cfg.get("bot_token", "") or "").strip()
+        telegram_cfg["allowed_chat_ids"] = _normalize_string_list(telegram_cfg.get("allowed_chat_ids"))
+        telegram_cfg["min_interval_sec"] = _coerce_float(telegram_cfg.get("min_interval_sec"), 0.5)
+        telegram_cfg["poll_interval_sec"] = _coerce_float(telegram_cfg.get("poll_interval_sec"), 1.0)
+        telegram_cfg["long_poll_timeout_sec"] = _coerce_float(telegram_cfg.get("long_poll_timeout_sec"), 20.0)
+
     def _merge_config(self, base: Dict, override: Dict):
         """Recursively merge dictionaries."""
         for key, value in override.items():
@@ -352,6 +420,9 @@ class Config:
 
     def get_voice_id_config(self) -> Dict:
         return self.config.get("voice_id", {})
+
+    def get_telegram_config(self) -> Dict:
+        return self.config.get("telegram", {})
 
     def save(self, config_file: str = None):
         file_path = config_file or self.config_file
