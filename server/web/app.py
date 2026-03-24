@@ -18,6 +18,8 @@ from fastapi.responses import FileResponse
 _agent_ref: Callable = lambda: None
 _robot_ref: Callable = lambda: None
 _mode_ref: Callable = lambda: "agent"
+_default_dashboard_state: dict = {}
+_dashboard_state_ref: Callable = lambda: _default_dashboard_state
 
 # ── WebSocket client registry ─────────────────────────────────────────────────
 _ws_clients: Set[WebSocket] = set()
@@ -38,6 +40,11 @@ def get_agent():
 
 def get_mode() -> str:
     return _mode_ref()
+
+
+def get_dashboard_state() -> dict:
+    state = _dashboard_state_ref()
+    return state if isinstance(state, dict) else {}
 
 
 async def broadcast(event: dict):
@@ -101,11 +108,17 @@ async def _status_poller():
             pass
 
 
-def create_app(agent_fn: Callable, robot_fn: Callable, mode_fn: Callable) -> FastAPI:
-    global _agent_ref, _robot_ref, _mode_ref
+def create_app(
+    agent_fn: Callable,
+    robot_fn: Callable,
+    mode_fn: Callable,
+    dashboard_state_fn: Callable | None = None,
+) -> FastAPI:
+    global _agent_ref, _robot_ref, _mode_ref, _dashboard_state_ref
     _agent_ref = agent_fn
     _robot_ref = robot_fn
     _mode_ref = mode_fn
+    _dashboard_state_ref = dashboard_state_fn or (lambda: _default_dashboard_state)
 
     app = FastAPI(title="ccoli dashboard", docs_url="/api/docs", lifespan=lifespan)
 
@@ -113,12 +126,12 @@ def create_app(agent_fn: Callable, robot_fn: Callable, mode_fn: Callable) -> Fas
     from .routes import (
         api_status, api_memory, api_conversation,
         api_schedules, api_config, api_integrations,
-        api_chat, api_logs,
+        api_chat, api_logs, api_diagnostics,
     )
     for mod in (
         api_status, api_memory, api_conversation,
         api_schedules, api_config, api_integrations,
-        api_chat, api_logs,
+        api_chat, api_logs, api_diagnostics,
     ):
         app.include_router(mod.router)
 
