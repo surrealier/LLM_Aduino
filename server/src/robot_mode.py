@@ -8,6 +8,7 @@ import json
 import logging
 import re
 
+from emotion_system import EmotionSystem
 from .utils import clamp
 
 log = logging.getLogger(__name__)
@@ -100,10 +101,11 @@ def _normalize_robot_config(robot_config: dict | None) -> dict:
 
 class RobotMode:
     """로봇 모드 메인 클래스 - 음성 명령을 로봇 동작으로 변환"""
-    def __init__(self, actions_config, llm_client=None, robot_config: dict | None = None):
+    def __init__(self, actions_config, llm_client=None, robot_config: dict | None = None, emotion_system=None):
         self.actions_config = actions_config
         self.llm = llm_client
         self.robot_config = _normalize_robot_config(robot_config)
+        self.emotion_system = emotion_system or EmotionSystem()
 
     @property
     def controller_type(self) -> str:
@@ -255,7 +257,11 @@ class RobotMode:
     def generate_emotion_response(self, user_text: str) -> tuple[str, str, dict]:
         """LLM에 감정 태그 포함 응답을 요청하고, 감정+페이로드를 반환."""
         if not self.llm or not (user_text or "").strip():
-            return "", "neutral", self.build_robot_payload("neutral")
+            emotion = self.emotion_system.register_emotion_signal("neutral")
+            return "", emotion, self.build_robot_payload(emotion)
+
+        # User-side context can leave a lingering mood before the reply emotion lands.
+        self.emotion_system.analyze_emotion(user_text)
 
         emotions_list = ", ".join(EMOTION_MAP.keys())
         system_prompt = (
@@ -273,10 +279,13 @@ class RobotMode:
         ]
         try:
             response = self.llm.chat(messages, temperature=0.7, max_tokens=100, think=False)
-            clean_text, emotion, payload = self.process_emotion_response(response)
+            clean_text, tagged_emotion, _payload = self.process_emotion_response(response)
+            emotion = self.emotion_system.register_emotion_signal(tagged_emotion)
+            payload = self.build_robot_payload(emotion, clean_text)
             if not clean_text:
                 clean_text = response
             return clean_text, emotion, payload
         except Exception as exc:
             log.error("Emotion response failed: %s", exc)
-            return user_text, "neutral", self.build_robot_payload("neutral")
+            emotion = self.emotion_system.register_emotion_signal("neutral")
+            return user_text, emotion, self.build_robot_payload(emotion)

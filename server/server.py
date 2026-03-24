@@ -21,6 +21,7 @@ import numpy as np
 import yaml
 
 from config_loader import get_config
+from emotion_system import EmotionSystem
 from src.agent_mode import AgentMode
 from src.audio_processor import normalize_to_dbfs, qc, save_wav, trim_energy
 from src.channels import TelegramBotAdapter, TelegramBotClient, TelegramChannelService, TelegramPollingWorker
@@ -1036,6 +1037,7 @@ def main():
         ensure_ollama_running(llm_config.get("base_url", "http://localhost:11434"), llm_config)
 
     llm_client = PriorityLLMClient(llm_config, runtime_controller.preferences)
+    shared_emotion_system = EmotionSystem()
     log.info(
         "LLM Runtime Priority: %s (API: %s)",
         " > ".join(runtime_controller.preferences.llm_priority),
@@ -1047,7 +1049,12 @@ def main():
         log.info("Runtime note: %s", note)
 
     # Initialize mode handlers
-    robot_handler = RobotMode(ACTIONS_CONFIG, llm_client, robot_config=robot_config)
+    robot_handler = RobotMode(
+        ACTIONS_CONFIG,
+        llm_client,
+        robot_config=robot_config,
+        emotion_system=shared_emotion_system,
+    )
     agent_handler = AgentMode(
         llm_client,
         weather_config.get("api_key"),
@@ -1058,6 +1065,7 @@ def main():
         tts_voice=tts_config.get("voice", "ko-KR-SunHiNeural"),
         memory_dir=memory_dir,
         memory_refresh_interval=memory_refresh_interval,
+        emotion_system=shared_emotion_system,
     )
 
     log.info(

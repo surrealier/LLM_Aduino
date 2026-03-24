@@ -1,4 +1,5 @@
 """Extended Robot mode tests — actions, clamping, invalid JSON, mode switch."""
+from emotion_system import EmotionSystem
 from src.robot_mode import RobotMode
 
 
@@ -98,3 +99,16 @@ def test_build_robot_payload_companion_uart_profile():
     assert payload["emotion"] == "sad"
     assert payload["emotion_state"]["persist_sec"] == 1200
     assert payload["face"] == "sad"
+
+
+def test_generate_emotion_response_keeps_lingering_mood():
+    emotion_system = EmotionSystem()
+    emotion_system.analyze_emotion("너 진짜 싫어")
+
+    llm = _FakeLLM(["[emotion:happy] 다녀와. 조심해!"])
+    robot = RobotMode([], llm, emotion_system=emotion_system)
+
+    clean_text, emotion, payload = robot.generate_emotion_response("미안해")
+    assert clean_text == "다녀와. 조심해!"
+    assert emotion in {"angry", "sad"}
+    assert payload["emotion"] == emotion

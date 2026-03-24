@@ -56,6 +56,7 @@ def test_get_emotion_command_structure():
     assert cmd["action"] == "EMOTION"
     assert cmd["emotion"] == "excited"
     assert "led" in cmd and "servo_action" in cmd
+    assert "emotion_state" in cmd
 
 
 def test_set_emotion_valid_and_invalid():
@@ -93,3 +94,31 @@ def test_get_random_emotion_excludes_current():
     es.set_emotion("happy")
     for _ in range(20):
         assert es.get_random_emotion(exclude_current=True) != "happy"
+
+
+def test_apology_does_not_immediately_reset_negative_emotion():
+    es = EmotionSystem()
+    first = es.analyze_emotion("너 진짜 싫어")
+    assert first == "angry"
+
+    second = es.analyze_emotion("미안해")
+    assert second in {"angry", "sad"}
+    snapshot = es.get_state_snapshot()
+    assert snapshot["relation"]["grudge"] > 0.0
+
+
+def test_sleep_body_state_biases_idle_emotion():
+    es = EmotionSystem()
+    es.set_body_state(sleep_mode=True, fatigue=0.9)
+    assert es.analyze_emotion("안녕") == "sleepy"
+
+
+def test_decay_softens_mood_and_grudge():
+    es = EmotionSystem()
+    es.analyze_emotion("너무 짜증나")
+    before = es.get_state_snapshot()
+    assert before["relation"]["grudge"] > 0.0
+
+    es.decay_to_neutral(probability=1.0)
+    after = es.get_state_snapshot()
+    assert after["relation"]["grudge"] <= before["relation"]["grudge"]
