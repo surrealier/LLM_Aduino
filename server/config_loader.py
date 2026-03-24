@@ -104,6 +104,46 @@ class Config:
             "proactive": True,
             "proactive_interval": 1800,
         },
+        "features": {
+            "robot_mode_enabled": False,
+        },
+        "robot": {
+            "controller": "legacy_direct",
+            "transport": "local",
+            "companion": {
+                "transport": "uart",
+                "baudrate": 115200,
+                "tx_pin": 26,
+                "rx_pin": 32,
+            },
+            "servo": {
+                "count": 2,
+                "pin_pitch": 26,
+                "pin_tilt": 32,
+                "angle_min": 0,
+                "angle_max": 180,
+                "default_angle": 90,
+            },
+            "display": {
+                "type": "ssd1306",
+                "width": 128,
+                "height": 64,
+                "i2c_scl": 21,
+                "i2c_sda": 25,
+                "i2c_addr": "0x3C",
+            },
+            "idle": {
+                "blink_interval_min": 3000,
+                "blink_interval_max": 5000,
+                "gaze_interval": 8000,
+            },
+            "emotion": {
+                "default": "neutral",
+                "decay_to_neutral": True,
+                "decay_interval": 30,
+                "persist_sec": 900,
+            },
+        },
         "weather": {
             "api_key": "",
             "lat": 37.5665,
@@ -348,6 +388,49 @@ class Config:
         tts_cfg = self.config.setdefault("tts", {})
         tts_cfg["backend"] = (tts_cfg.get("backend") or "edge_tts").strip().lower()
 
+        features_cfg = self.config.setdefault("features", {})
+        features_cfg["robot_mode_enabled"] = _coerce_bool(features_cfg.get("robot_mode_enabled"), False)
+
+        robot_cfg = self.config.setdefault("robot", {})
+        controller = str(robot_cfg.get("controller", "legacy_direct") or "legacy_direct").strip().lower()
+        if controller not in {"legacy_direct", "companion_uart"}:
+            controller = "legacy_direct"
+        robot_cfg["controller"] = controller
+        robot_cfg["transport"] = str(
+            robot_cfg.get("transport", "companion" if controller == "companion_uart" else "local") or ""
+        ).strip().lower() or ("companion" if controller == "companion_uart" else "local")
+
+        companion_cfg = robot_cfg.setdefault("companion", {})
+        companion_cfg["transport"] = "uart"
+        try:
+            companion_cfg["baudrate"] = int(companion_cfg.get("baudrate", 115200) or 115200)
+        except (TypeError, ValueError):
+            companion_cfg["baudrate"] = 115200
+        for pin_key, default_pin in (("tx_pin", 26), ("rx_pin", 32)):
+            try:
+                companion_cfg[pin_key] = int(companion_cfg.get(pin_key, default_pin))
+            except (TypeError, ValueError):
+                companion_cfg[pin_key] = default_pin
+
+        servo_cfg = robot_cfg.setdefault("servo", {})
+        try:
+            servo_count = int(servo_cfg.get("count", 2) or 2)
+        except (TypeError, ValueError):
+            servo_count = 2
+        servo_cfg["count"] = min(4, max(1, servo_count))
+
+        display_cfg = robot_cfg.setdefault("display", {})
+        display_type = str(display_cfg.get("type") or "").strip().lower()
+        if not display_type:
+            display_type = "st7789v2_240x280" if controller == "companion_uart" else "ssd1306"
+        display_cfg["type"] = display_type
+
+        robot_emotion_cfg = robot_cfg.setdefault("emotion", {})
+        try:
+            robot_emotion_cfg["persist_sec"] = int(robot_emotion_cfg.get("persist_sec", 900) or 900)
+        except (TypeError, ValueError):
+            robot_emotion_cfg["persist_sec"] = 900
+
         connection_cfg = self.config.setdefault("connection", {})
         connection_cfg["priority"] = normalize_priority_list(
             connection_cfg.get("priority"),
@@ -405,6 +488,12 @@ class Config:
 
     def get_assistant_config(self) -> Dict:
         return self.config.get("assistant", {})
+
+    def get_features_config(self) -> Dict:
+        return self.config.get("features", {})
+
+    def get_robot_config(self) -> Dict:
+        return self.config.get("robot", {})
 
     def get_weather_config(self) -> Dict:
         return self.config.get("weather", {})

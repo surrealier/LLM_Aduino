@@ -17,6 +17,9 @@ def test_defaults_when_no_yaml_exists(tmp_path):
     cfg = Config(config_file=str(tmp_path / "missing.yaml"))
     assert cfg.get("server", "port") == 5001
     assert cfg.get("stt", "language") == "ko"
+    assert cfg.get("features", "robot_mode_enabled") is False
+    assert cfg.get("robot", "controller") == "legacy_direct"
+    assert cfg.get("robot", "servo", "count") == 2
     assert cfg.get("connection", "mode") == "auto"
     assert cfg.get("connection", "serial_baudrate") == 115200
     assert cfg.get("llm", "priority") == ["ollama", "api", "ollama_cpu", "other"]
@@ -69,6 +72,8 @@ def test_section_getters(tmp_path):
     assert "provider" in cfg.get_llm_config()
     assert "voice" in cfg.get_tts_config()
     assert "name" in cfg.get_assistant_config()
+    assert "robot_mode_enabled" in cfg.get_features_config()
+    assert "controller" in cfg.get_robot_config()
     assert "api_key" in cfg.get_weather_config()
     assert "max_history" in cfg.get_context_config()
     assert "enabled" in cfg.get_emotion_config()
@@ -96,3 +101,24 @@ def test_env_voice_id_enabled(tmp_path, monkeypatch):
     monkeypatch.setenv("VOICE_ID_ENABLED", "true")
     cfg = Config(config_file=str(tmp_path / "missing.yaml"))
     assert cfg.get("voice_id", "enabled") is True
+
+
+def test_robot_controller_normalized_from_yaml(tmp_path):
+    yaml_path = tmp_path / "config.yaml"
+    _write_yaml(
+        yaml_path,
+        {
+            "features": {"robot_mode_enabled": "yes"},
+            "robot": {
+                "controller": "COMPANION_UART",
+                "servo": {"count": 9},
+                "emotion": {"persist_sec": "1200"},
+            },
+        },
+    )
+    cfg = Config(config_file=str(yaml_path))
+    assert cfg.get("features", "robot_mode_enabled") is True
+    assert cfg.get("robot", "controller") == "companion_uart"
+    assert cfg.get("robot", "transport") == "companion"
+    assert cfg.get("robot", "servo", "count") == 4
+    assert cfg.get("robot", "emotion", "persist_sec") == 1200

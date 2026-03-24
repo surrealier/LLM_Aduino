@@ -1025,6 +1025,7 @@ def main():
     weather_config = config.get_weather_config()
     assistant_config = config.get_assistant_config()
     tts_config = config.get_tts_config()
+    robot_config = config.get_robot_config()
     memory_dir = config.get("memory", "memory_dir", default="memory")
     memory_refresh_interval = int(config.get("memory", "refresh_interval", default=5))
 
@@ -1046,7 +1047,7 @@ def main():
         log.info("Runtime note: %s", note)
 
     # Initialize mode handlers
-    robot_handler = RobotMode(ACTIONS_CONFIG, llm_client)
+    robot_handler = RobotMode(ACTIONS_CONFIG, llm_client, robot_config=robot_config)
     agent_handler = AgentMode(
         llm_client,
         weather_config.get("api_key"),
@@ -1063,6 +1064,12 @@ def main():
         "Assistant: %s (%s)",
         assistant_config.get("name", "ccoli"),
         assistant_config.get("personality", "witty"),
+    )
+    log.info(
+        "Robot controller: %s (display=%s servo_count=%s)",
+        robot_config.get("controller", "legacy_direct"),
+        robot_config.get("display", {}).get("type", "ssd1306"),
+        robot_config.get("servo", {}).get("count", 2),
     )
 
 

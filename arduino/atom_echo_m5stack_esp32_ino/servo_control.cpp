@@ -18,6 +18,10 @@ struct ServoState {
 static Servo servos[2];
 static ServoState servo_states[2];
 
+static bool servo_hw_enabled() {
+  return SERVO_PIN_PITCH >= 0 && SERVO_PIN_TILT >= 0;
+}
+
 static int clamp_angle(int angle) {
   if (angle < SERVO_MIN_ANGLE) return SERVO_MIN_ANGLE;
   if (angle > SERVO_MAX_ANGLE) return SERVO_MAX_ANGLE;
@@ -72,19 +76,22 @@ static const ActionStep action_wiggle[] = {
 };
 
 void servo_init() {
+  servo_states[0] = {SERVO_CENTER_ANGLE, 0, 0, nullptr, false};
+  servo_states[1] = {SERVO_CENTER_ANGLE, 0, 0, nullptr, false};
+
+  if (!servo_hw_enabled()) return;
+
   servos[0].setPeriodHertz(50);
   servos[0].attach(SERVO_PIN_PITCH, 500, 2400);
   servos[1].setPeriodHertz(50);
   servos[1].attach(SERVO_PIN_TILT, 500, 2400);
-  
-  servo_states[0] = {SERVO_CENTER_ANGLE, 0, 0, nullptr, false};
-  servo_states[1] = {SERVO_CENTER_ANGLE, 0, 0, nullptr, false};
-  
+
   servos[0].write(SERVO_CENTER_ANGLE);
   servos[1].write(SERVO_CENTER_ANGLE);
 }
 
 void servo_set_angle(int servo_idx, int angle) {
+  if (!servo_hw_enabled()) return;
   if (servo_idx < 0 || servo_idx > 1) return;
   angle = clamp_angle(angle);
   servos[servo_idx].write(angle);
@@ -96,6 +103,7 @@ void servo_set_angle(int angle) {
 }
 
 void servo_play_action(ServoAction action) {
+  if (!servo_hw_enabled()) return;
   const ActionStep* steps = nullptr;
   
   switch (action) {
@@ -120,6 +128,7 @@ void servo_play_action(ServoAction action) {
 }
 
 void servo_stop() {
+  if (!servo_hw_enabled()) return;
   servo_states[0].busy = false;
   servo_states[1].busy = false;
   servo_states[0].current_action = nullptr;
@@ -129,6 +138,7 @@ void servo_stop() {
 }
 
 void servo_update() {
+  if (!servo_hw_enabled()) return;
   if (!servo_states[0].busy || !servo_states[0].current_action) return;
   
   unsigned long now = millis();
@@ -149,6 +159,7 @@ void servo_update() {
 }
 
 bool servo_is_busy() {
+  if (!servo_hw_enabled()) return false;
   return servo_states[0].busy || servo_states[1].busy;
 }
 

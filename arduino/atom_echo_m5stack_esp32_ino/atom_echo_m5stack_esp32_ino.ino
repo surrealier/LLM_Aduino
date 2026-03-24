@@ -26,6 +26,7 @@
 #include "display_control.h"
 #include "led_control.h"
 #include "protocol.h"
+#include "robot_bridge.h"
 #include "servo_control.h"
 #include "vad.h"
 
@@ -124,6 +125,7 @@ void setup() {
   Serial.begin(SERIAL_BAUD_RATE);
   Serial.setTimeout(0);
   delay(500);  // Wait for serial stabilization
+  robot_bridge_init();
 
   // Initialize LED -> indicate connecting (red)
   led_init();
@@ -272,5 +274,6 @@ void loop() {
   led_update_pattern();  // LED animation pattern
   display_update();      // OLED face animation + blink (currently placeholder)
   servo_update();        // Servo async action (rotate/wiggle) step processing
+  robot_bridge_update();
   delay(1);              // Feed watchdog + yield CPU
 }

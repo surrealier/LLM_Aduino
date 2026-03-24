@@ -34,9 +34,24 @@ extern const uint16_t SERVER_PORT;
 #define DISPLAY_HEIGHT  64
 #define DISPLAY_I2C_ADDR 0x3C
 
+// Companion robot bridge (Phase 1 scaffold)
+// Disabled by default so the legacy direct-servo path keeps working.
+// When enabled, the Grove pins are reassigned as UART TX/RX for a companion
+// controller and local servo outputs are disabled.
+#define ROBOT_BRIDGE_ENABLED 0
+#define ROBOT_BRIDGE_UART_PORT 1
+#define ROBOT_BRIDGE_BAUD 115200
+#define ROBOT_BRIDGE_TX_PIN 26
+#define ROBOT_BRIDGE_RX_PIN 32
+
 // Servo motors — Grove HY2.0-4P port
-#define SERVO_PIN_PITCH 26   // Servo #1: nod (up/down)
-#define SERVO_PIN_TILT  32   // Servo #2: tilt (left/right)
+#if ROBOT_BRIDGE_ENABLED
+  #define SERVO_PIN_PITCH -1
+  #define SERVO_PIN_TILT  -1
+#else
+  #define SERVO_PIN_PITCH 26   // Servo #1: nod (up/down)
+  #define SERVO_PIN_TILT  32   // Servo #2: tilt (left/right)
+#endif
 #define SERVO_MIN_ANGLE 0
 #define SERVO_MAX_ANGLE 180
 #define SERVO_CENTER_ANGLE 90

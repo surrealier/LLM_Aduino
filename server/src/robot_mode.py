@@ -3,6 +3,7 @@
 - 음성 명령을 서보 모터 제어 명령으로 변환
 - LLM 기반 명령 해석 및 모드 전환 의도 분류
 """
+import copy
 import json
 import logging
 import re
@@ -14,6 +15,8 @@ log = logging.getLogger(__name__)
 SERVO_MIN = 0
 SERVO_MAX = 180
 DEFAULT_ANGLE_CENTER = 90
+ROBOT_CONTROLLER_LEGACY_DIRECT = "legacy_direct"
+ROBOT_CONTROLLER_COMPANION_UART = "companion_uart"
 
 EMOTION_MAP = {
     "neutral": {"face": "neutral", "action": "none", "led": [255, 255, 255]},
@@ -28,12 +31,86 @@ EMOTION_MAP = {
     "confused": {"face": "confused", "action": "wiggle", "led": [255, 150, 0]},
 }
 
+DEFAULT_ROBOT_CONFIG = {
+    "controller": ROBOT_CONTROLLER_LEGACY_DIRECT,
+    "transport": "local",
+    "companion": {
+        "transport": "uart",
+        "baudrate": 115200,
+        "tx_pin": 26,
+        "rx_pin": 32,
+    },
+    "servo": {
+        "count": 2,
+    },
+    "display": {
+        "type": "ssd1306",
+    },
+    "emotion": {
+        "persist_sec": 900,
+    },
+}
+
+
+def _deep_merge(base: dict, override: dict | None) -> dict:
+    if not override:
+        return base
+
+    for key, value in override.items():
+        if isinstance(base.get(key), dict) and isinstance(value, dict):
+            _deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def _normalize_robot_config(robot_config: dict | None) -> dict:
+    merged = copy.deepcopy(DEFAULT_ROBOT_CONFIG)
+    _deep_merge(merged, robot_config)
+
+    controller = str(merged.get("controller") or ROBOT_CONTROLLER_LEGACY_DIRECT).strip().lower()
+    if controller not in {ROBOT_CONTROLLER_LEGACY_DIRECT, ROBOT_CONTROLLER_COMPANION_UART}:
+        controller = ROBOT_CONTROLLER_LEGACY_DIRECT
+    merged["controller"] = controller
+    merged["transport"] = "companion" if controller == ROBOT_CONTROLLER_COMPANION_UART else "local"
+
+    servo_cfg = merged.setdefault("servo", {})
+    try:
+        servo_count = int(servo_cfg.get("count", 2) or 2)
+    except (TypeError, ValueError):
+        servo_count = 2
+    servo_cfg["count"] = min(4, max(1, servo_count))
+
+    display_cfg = merged.setdefault("display", {})
+    display_type = str(display_cfg.get("type") or "").strip().lower()
+    if not display_type:
+        display_type = "st7789v2_240x280" if controller == ROBOT_CONTROLLER_COMPANION_UART else "ssd1306"
+    display_cfg["type"] = display_type
+
+    emotion_cfg = merged.setdefault("emotion", {})
+    try:
+        emotion_cfg["persist_sec"] = int(emotion_cfg.get("persist_sec", 900) or 900)
+    except (TypeError, ValueError):
+        emotion_cfg["persist_sec"] = 900
+
+    companion_cfg = merged.setdefault("companion", {})
+    companion_cfg["transport"] = "uart"
+    return merged
+
 
 class RobotMode:
     """로봇 모드 메인 클래스 - 음성 명령을 로봇 동작으로 변환"""
-    def __init__(self, actions_config, llm_client=None):
+    def __init__(self, actions_config, llm_client=None, robot_config: dict | None = None):
         self.actions_config = actions_config
         self.llm = llm_client
+        self.robot_config = _normalize_robot_config(robot_config)
+
+    @property
+    def controller_type(self) -> str:
+        return self.robot_config.get("controller", ROBOT_CONTROLLER_LEGACY_DIRECT)
+
+    def uses_companion_controller(self) -> bool:
+        return self.controller_type == ROBOT_CONTROLLER_COMPANION_UART
 
     def process_with_llm(self, text: str, current_angle: int) -> tuple[str, dict]:
         """LLM 기반 명령 처리. Returns (refined_text, action_dict).
@@ -117,13 +194,47 @@ class RobotMode:
 
     def build_robot_payload(self, emotion: str, text: str = "") -> dict:
         mapping = EMOTION_MAP.get(emotion, EMOTION_MAP["neutral"])
+        display_text = text[:20] if text else ""
+        if not self.uses_companion_controller():
+            return {
+                "action": "ROBOT_EMOTION",
+                "emotion": emotion,
+                "face": mapping["face"],
+                "servo_action": mapping["action"],
+                "led_color": mapping["led"],
+                "display_text": display_text,
+                "meaningful": True,
+                "transport": "local",
+            }
+
+        speech_text = text[:80] if text else ""
         return {
-            "action": "ROBOT_EMOTION",
+            "action": "ROBOT_STATE",
+            "controller": self.controller_type,
+            "transport": self.robot_config.get("companion", {}).get("transport", "uart"),
+            "mode": "awake",
             "emotion": emotion,
+            "emotion_state": {
+                "dominant": emotion,
+                "persist_sec": self.robot_config.get("emotion", {}).get("persist_sec", 900),
+            },
+            "gesture": {
+                "id": mapping["action"],
+                "intensity": 0.72 if text else 0.35,
+            },
+            "speech": {
+                "tts_active": bool(text),
+                "text": speech_text,
+            },
+            "profile": {
+                "servo_count": self.robot_config.get("servo", {}).get("count", 2),
+                "display": self.robot_config.get("display", {}).get("type", "st7789v2_240x280"),
+            },
+            # Keep these fields so legacy firmware can still do a safe local fallback.
             "face": mapping["face"],
             "servo_action": mapping["action"],
             "led_color": mapping["led"],
-            "display_text": text[:20] if text else "",
+            "display_text": speech_text[:32],
             "meaningful": True,
         }
 
