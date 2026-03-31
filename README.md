@@ -259,6 +259,13 @@ ccoli config llm --provider claude --model claude-3-5-haiku-latest --api-key <AN
 ccoli config llm --provider chatgpt --model gpt-4o-mini --api-key <OPENAI_API_KEY>
 ```
 
+API key 발급:
+| Provider | Get API Key |
+|----------|-------------|
+| Gemini | [Google AI Studio](https://aistudio.google.com/apikey) |
+| Claude | [Anthropic Console](https://console.anthropic.com/settings/keys) |
+| ChatGPT | [OpenAI Platform](https://platform.openai.com/api-keys) |
+
 Ollama is auto-installed and auto-started if missing.
 
 </details>
@@ -315,6 +322,15 @@ ccoli config integration test calendar-google
 ```
 
 Missing keys? The `test` command tells you exactly what to set.
+
+Integration API key 발급:
+| Integration | Get API Key |
+|-------------|-------------|
+| Weather | [OpenWeatherMap](https://home.openweathermap.org/api_keys) |
+| Search | [Tavily](https://app.tavily.com/home) |
+| Maps | [Google Maps Platform](https://console.cloud.google.com/apis/credentials) |
+| Calendar (Google) | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) |
+| Notify (Slack) | [Slack API — Your Apps](https://api.slack.com/apps) |
 
 </details>
 
