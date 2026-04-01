@@ -10,6 +10,7 @@ The bootstrap script installs the lightweight CLI first, then opens `ccoli setup
 - `Ollama Local`
 - `Cloud API` (`gemini`, `claude`, `chatgpt`)
 - `Configure Later`
+- `wired` or `wifi` device connection during the same onboarding flow
 
 On macOS, the setup flow defaults STT to `cpu`.
 The current STT path (`faster-whisper`) does not use Apple `MPS`, and the default TTS backend (`edge_tts`) also does not use local MPS/GPU acceleration.
@@ -18,6 +19,12 @@ If you want to run onboarding again later:
 
 ```bash
 ccoli setup
+```
+
+Non-interactive example:
+
+```bash
+ccoli setup --install-target api --provider gemini --connection-mode wired --skip-install --yes
 ```
 
 Local repo / development path:
@@ -74,6 +81,10 @@ python3 -m pip install -e .[runtime]
 Use this only if you want the ESP32 to connect over Wi-Fi instead of USB:
 
 ```bash
+ccoli setup
+# choose `wifi` during onboarding
+
+# or configure it later:
 ccoli config wifi <WiFi Name> password <password> port <port> [mode wifi|wired]
 ```
 

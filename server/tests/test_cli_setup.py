@@ -22,6 +22,37 @@ def test_parser_has_setup_command():
     assert "setup" in choices
 
 
+def test_parser_setup_accepts_connection_options():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "setup",
+            "--install-target",
+            "api",
+            "--provider",
+            "gemini",
+            "--connection-mode",
+            "wifi",
+            "--wifi-ssid",
+            "OfficeLAN",
+            "--wifi-password",
+            "secret-pass",
+            "--server-ip",
+            "192.168.0.20",
+            "--server-port",
+            "5009",
+            "--skip-install",
+            "--yes",
+        ]
+    )
+
+    assert args.connection_mode == "wifi"
+    assert args.wifi_ssid == "OfficeLAN"
+    assert args.wifi_password == "secret-pass"
+    assert args.server_ip == "192.168.0.20"
+    assert args.server_port == 5009
+
+
 def test_default_stt_device_uses_cpu_on_mac(monkeypatch):
     monkeypatch.setattr("ccoli.cli.sys.platform", "darwin")
     assert _default_stt_device() == "cpu"
@@ -34,6 +65,11 @@ def test_build_setup_choice_for_ollama():
         model=None,
         api_key=None,
         stt_device="cpu",
+        connection_mode="wired",
+        wifi_ssid=None,
+        wifi_password=None,
+        server_ip=None,
+        server_port=None,
     )
 
     assert choice.install_target == "ollama"
@@ -41,6 +77,11 @@ def test_build_setup_choice_for_ollama():
     assert choice.model == DEFAULT_LLM_MODELS["ollama"]
     assert choice.install_extras == ("runtime",)
     assert choice.api_key is None
+    assert choice.connection_mode == "wired"
+    assert choice.server_port == 5001
+    assert choice.wifi_ssid == ""
+    assert choice.wifi_password is None
+    assert choice.server_ip == ""
 
 
 def test_build_setup_choice_for_gemini_api():
@@ -50,6 +91,11 @@ def test_build_setup_choice_for_gemini_api():
         model=None,
         api_key="gemini-secret",
         stt_device="cpu",
+        connection_mode="wifi",
+        wifi_ssid="OfficeLAN",
+        wifi_password="secret-pass",
+        server_ip="192.168.0.20",
+        server_port=5009,
     )
 
     assert choice.install_target == "api"
@@ -57,6 +103,31 @@ def test_build_setup_choice_for_gemini_api():
     assert choice.model == DEFAULT_LLM_MODELS["gemini"]
     assert choice.install_extras == ("runtime",)
     assert choice.api_key == "gemini-secret"
+    assert choice.connection_mode == "wifi"
+    assert choice.wifi_ssid == "OfficeLAN"
+    assert choice.wifi_password == "secret-pass"
+    assert choice.server_ip == "192.168.0.20"
+    assert choice.server_port == 5009
+
+
+def test_build_setup_choice_requires_wifi_details():
+    try:
+        _build_setup_choice(
+            install_target="api",
+            provider="gemini",
+            model=None,
+            api_key=None,
+            stt_device="cpu",
+            connection_mode="wifi",
+            wifi_ssid=None,
+            wifi_password="secret-pass",
+            server_ip="192.168.0.20",
+            server_port=None,
+        )
+    except ValueError as exc:
+        assert "wifi_ssid" in str(exc)
+    else:
+        raise AssertionError("expected wifi setup to require ssid")
 
 
 def test_apply_setup_choice_updates_config_and_env(tmp_path):
@@ -71,6 +142,11 @@ def test_apply_setup_choice_updates_config_and_env(tmp_path):
         model=None,
         api_key="gemini-secret",
         stt_device="cpu",
+        connection_mode="wifi",
+        wifi_ssid="OfficeLAN",
+        wifi_password="secret-pass",
+        server_ip="192.168.0.20",
+        server_port=5009,
     )
 
     config_path, env_path = _apply_setup_choice(root, choice)
@@ -81,4 +157,14 @@ def test_apply_setup_choice_updates_config_and_env(tmp_path):
     assert config["llm"]["provider"] == "gemini"
     assert config["llm"]["model"] == DEFAULT_LLM_MODELS["gemini"]
     assert config["llm"]["base_url"] == ""
+    assert config["server"]["port"] == 5009
+    assert config["connection"]["mode"] == "wifi"
     assert env_path.read_text(encoding="utf-8").strip() == "GEMINI_API_KEY=gemini-secret"
+
+    secrets_path = root / "arduino" / "atom_echo_m5stack_esp32_ino" / "device_secrets.h"
+    secrets_text = secrets_path.read_text(encoding="utf-8")
+    assert 'CONNECTION_MODE = "wifi"' in secrets_text
+    assert 'SSID = "OfficeLAN"' in secrets_text
+    assert 'PASS = "secret-pass"' in secrets_text
+    assert 'SERVER_IP = "192.168.0.20"' in secrets_text
+    assert "SERVER_PORT = 5009" in secrets_text

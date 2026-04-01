@@ -64,6 +64,7 @@ INTEGRATION_SPECS = {
 }
 
 API_PROVIDERS = ("gemini", "claude", "chatgpt")
+CONNECTION_MODES = ("wired", "wifi")
 INSTALL_TARGETS = {
     "ollama": {
         "title": "Ollama Local",
@@ -93,6 +94,11 @@ class SetupChoice:
     model: str
     api_key: Optional[str]
     stt_device: str
+    connection_mode: str
+    server_port: int
+    wifi_ssid: str
+    wifi_password: Optional[str]
+    server_ip: str
     install_extras: tuple[str, ...]
 
     @property
@@ -138,11 +144,24 @@ def _escape_cpp_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _extract_server_ip(contents: str) -> Optional[str]:
-    match = re.search(r'const\s+char\*\s+SERVER_IP\s*=\s*"([^"]*)"\s*;', contents)
+def _extract_cpp_string(contents: str, name: str) -> Optional[str]:
+    match = re.search(rf'const\s+char\*\s+{re.escape(name)}\s*=\s*"([^"]*)"\s*;', contents)
     if not match:
         return None
-    extracted = match.group(1).strip()
+    return match.group(1).strip()
+
+
+def _extract_cpp_uint16(contents: str, name: str) -> Optional[int]:
+    match = re.search(rf"const\s+uint16_t\s+{re.escape(name)}\s*=\s*(\d+)\s*;", contents)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _extract_server_ip(contents: str) -> Optional[str]:
+    extracted = _extract_cpp_string(contents, "SERVER_IP")
+    if extracted is None:
+        return None
     return extracted or None
 
 
@@ -155,6 +174,54 @@ def _detect_server_ip(root: Path) -> str:
         if detected:
             return detected
     return DEFAULT_SERVER_IP
+
+
+def _detect_device_secret_defaults(root: Path) -> dict[str, object]:
+    defaults: dict[str, object] = {
+        "connection_mode": "wired",
+        "wifi_ssid": "",
+        "wifi_password": "",
+        "server_ip": "",
+        "server_port": DEFAULT_SERVER_PORT,
+    }
+    for candidate in (_device_secrets_path(root), _device_secrets_example_path(root)):
+        if not candidate.exists():
+            continue
+        content = candidate.read_text(encoding="utf-8")
+        connection_mode = _extract_cpp_string(content, "CONNECTION_MODE")
+        wifi_ssid = _extract_cpp_string(content, "SSID")
+        wifi_password = _extract_cpp_string(content, "PASS")
+        server_ip = _extract_cpp_string(content, "SERVER_IP")
+        server_port = _extract_cpp_uint16(content, "SERVER_PORT")
+        if connection_mode in CONNECTION_MODES:
+            defaults["connection_mode"] = connection_mode
+        if wifi_ssid is not None:
+            defaults["wifi_ssid"] = wifi_ssid
+        if wifi_password is not None:
+            defaults["wifi_password"] = wifi_password
+        if server_ip is not None:
+            defaults["server_ip"] = server_ip
+        if server_port is not None:
+            defaults["server_port"] = server_port
+        break
+    return defaults
+
+
+def _setup_connection_defaults(root: Path) -> dict[str, object]:
+    defaults = _detect_device_secret_defaults(root)
+    config_data = _load_yaml_dict(_server_config_path(root))
+
+    server_cfg = config_data.get("server", {}) if isinstance(config_data.get("server"), dict) else {}
+    port = server_cfg.get("port")
+    if isinstance(port, int):
+        defaults["server_port"] = port
+
+    connection_cfg = config_data.get("connection", {}) if isinstance(config_data.get("connection"), dict) else {}
+    connection_mode = str(connection_cfg.get("mode", "")).strip().lower()
+    if connection_mode in CONNECTION_MODES:
+        defaults["connection_mode"] = connection_mode
+
+    return defaults
 
 
 def _validate_port(port: int) -> int:
@@ -208,6 +275,14 @@ def _prompt_text(message: str, default: Optional[str] = None, secret: bool = Fal
     return default or ""
 
 
+def _prompt_secret_with_saved_default(message: str, saved_value: Optional[str] = None) -> str:
+    prompt_suffix = " [saved]" if saved_value else ""
+    value = getpass.getpass(f"{message}{prompt_suffix}: ").strip()
+    if value:
+        return value
+    return saved_value or ""
+
+
 def _prompt_confirm(message: str, default: bool = True) -> bool:
     hint = "Y/n" if default else "y/N"
     while True:
@@ -248,6 +323,15 @@ def _prompt_select(message: str, options: Sequence[tuple[str, str]], default_ind
         print(f"Please choose a number between 1 and {len(options)}.")
 
 
+def _prompt_port(message: str, default: int) -> int:
+    while True:
+        raw = _prompt_text(message, default=str(default))
+        try:
+            return _validate_port(int(raw))
+        except ValueError:
+            print("Please enter a valid port between 1 and 65535.")
+
+
 def _render_setup_summary(choice: SetupChoice, skip_install: bool) -> None:
     console = _console()
     extras = ", ".join(choice.install_extras) or "(none)"
@@ -260,6 +344,12 @@ def _render_setup_summary(choice: SetupChoice, skip_install: bool) -> None:
         table.add_row("Provider", choice.provider)
         table.add_row("Model", choice.model)
         table.add_row("STT device", choice.stt_device)
+        table.add_row("Device connection", choice.connection_mode)
+        table.add_row("Server port", str(choice.server_port))
+        if choice.connection_mode == "wifi":
+            table.add_row("Wi-Fi SSID", choice.wifi_ssid)
+            table.add_row("Server IP", choice.server_ip)
+            table.add_row("Wi-Fi password", "saved to device_secrets.h")
         table.add_row("Python extras", extras)
         table.add_row("Install action", install_action)
         table.add_row("API key", "saved to server/.env" if choice.api_key else "not provided")
@@ -270,6 +360,12 @@ def _render_setup_summary(choice: SetupChoice, skip_install: bool) -> None:
     print(f"- Provider: {choice.provider}")
     print(f"- Model: {choice.model}")
     print(f"- STT device: {choice.stt_device}")
+    print(f"- Device connection: {choice.connection_mode}")
+    print(f"- Server port: {choice.server_port}")
+    if choice.connection_mode == "wifi":
+        print(f"- Wi-Fi SSID: {choice.wifi_ssid}")
+        print(f"- Server IP: {choice.server_ip}")
+        print("- Wi-Fi password: saved to device_secrets.h")
     print(f"- Python extras: {extras}")
     print(f"- Install action: {install_action}")
     print(f"- API key: {'saved to server/.env' if choice.api_key else 'not provided'}")
@@ -281,6 +377,11 @@ def _build_setup_choice(
     model: Optional[str],
     api_key: Optional[str],
     stt_device: Optional[str],
+    connection_mode: Optional[str],
+    wifi_ssid: Optional[str],
+    wifi_password: Optional[str],
+    server_ip: Optional[str],
+    server_port: Optional[int],
 ) -> SetupChoice:
     normalized_target = (install_target or "").strip().lower()
     if normalized_target not in INSTALL_TARGETS:
@@ -304,6 +405,26 @@ def _build_setup_choice(
 
     resolved_model = (model or DEFAULT_LLM_MODELS[resolved_provider]).strip()
     resolved_key = (api_key or "").strip() or None
+    resolved_connection_mode = (connection_mode or "wired").strip().lower()
+    if resolved_connection_mode not in CONNECTION_MODES:
+        raise ValueError(f"connection_mode must be one of: {', '.join(CONNECTION_MODES)}")
+
+    resolved_server_port = _validate_port(int(server_port or DEFAULT_SERVER_PORT))
+    resolved_wifi_ssid = (wifi_ssid or "").strip()
+    resolved_wifi_password = (wifi_password or "").strip() or None
+    resolved_server_ip = (server_ip or "").strip()
+    if resolved_connection_mode == "wifi":
+        if not resolved_wifi_ssid:
+            raise ValueError("wifi_ssid is required when connection_mode is `wifi`")
+        if not resolved_wifi_password:
+            raise ValueError("wifi_password is required when connection_mode is `wifi`")
+        if not resolved_server_ip:
+            raise ValueError("server_ip is required when connection_mode is `wifi`")
+    else:
+        resolved_wifi_ssid = ""
+        resolved_wifi_password = None
+        resolved_server_ip = ""
+
     extras = tuple(INSTALL_TARGETS[normalized_target]["extras"])
     return SetupChoice(
         install_target=normalized_target,
@@ -311,11 +432,18 @@ def _build_setup_choice(
         model=resolved_model,
         api_key=resolved_key,
         stt_device=resolved_device,
+        connection_mode=resolved_connection_mode,
+        server_port=resolved_server_port,
+        wifi_ssid=resolved_wifi_ssid,
+        wifi_password=resolved_wifi_password,
+        server_ip=resolved_server_ip,
         install_extras=extras,
     )
 
 
 def _prompt_setup_choice(default_target: Optional[str], stt_device: Optional[str]) -> SetupChoice:
+    root = _repo_root()
+    connection_defaults = _setup_connection_defaults(root)
     _print_setup_banner()
     options = [
         ("ollama", "Local model on your machine via Ollama"),
@@ -361,7 +489,47 @@ def _prompt_setup_choice(default_target: Optional[str], stt_device: Optional[str
         ],
         default_index=0 if (stt_device or _default_stt_device()) == "cpu" else 1,
     )
-    return _build_setup_choice(target, provider, model, api_key, device)
+    default_connection_mode = str(connection_defaults.get("connection_mode", "wired"))
+    connection_mode = _prompt_select(
+        "Choose device connection",
+        [
+            ("wired", "USB serial, no Wi-Fi credentials required"),
+            ("wifi", "Write Wi-Fi credentials and server IP to device_secrets.h"),
+        ],
+        default_index=0 if default_connection_mode == "wired" else 1,
+    )
+    server_port = _prompt_port(
+        "Server port",
+        int(connection_defaults.get("server_port", DEFAULT_SERVER_PORT)),
+    )
+    wifi_ssid = None
+    wifi_password = None
+    server_ip = None
+    if connection_mode == "wifi":
+        wifi_ssid = _prompt_text(
+            "Wi-Fi name (SSID)",
+            default=str(connection_defaults.get("wifi_ssid", "")) or None,
+        )
+        wifi_password = _prompt_secret_with_saved_default(
+            "Wi-Fi password",
+            saved_value=str(connection_defaults.get("wifi_password", "")) or None,
+        )
+        server_ip = _prompt_text(
+            "Server IP",
+            default=str(connection_defaults.get("server_ip", "")) or None,
+        )
+    return _build_setup_choice(
+        target,
+        provider,
+        model,
+        api_key,
+        device,
+        connection_mode,
+        wifi_ssid,
+        wifi_password,
+        server_ip,
+        server_port,
+    )
 
 
 def _editable_install_spec(extras: Sequence[str]) -> str:
@@ -500,6 +668,19 @@ def _apply_setup_choice(root: Path, choice: SetupChoice) -> tuple[Path, Path]:
     config_path = _configure_llm(root, choice.provider, choice.model, choice.base_url, choice.api_key)
     config_data = _load_yaml_dict(config_path)
 
+    server_cfg = config_data.setdefault("server", {})
+    if not isinstance(server_cfg, dict):
+        server_cfg = {}
+        config_data["server"] = server_cfg
+    server_cfg["port"] = choice.server_port
+    server_cfg.setdefault("host", "0.0.0.0")
+
+    connection_cfg = config_data.setdefault("connection", {})
+    if not isinstance(connection_cfg, dict):
+        connection_cfg = {}
+        config_data["connection"] = connection_cfg
+    connection_cfg["mode"] = choice.connection_mode
+
     stt_cfg = config_data.setdefault("stt", {})
     if not isinstance(stt_cfg, dict):
         stt_cfg = {}
@@ -513,8 +694,18 @@ def _apply_setup_choice(root: Path, choice: SetupChoice) -> tuple[Path, Path]:
     setup_cfg["install_target"] = choice.install_target
     setup_cfg["provider"] = choice.provider
     setup_cfg["python_extras"] = list(choice.install_extras)
+    setup_cfg["connection_mode"] = choice.connection_mode
+    setup_cfg["server_port"] = choice.server_port
 
     _save_yaml_dict(config_path, config_data)
+    _write_device_secrets(
+        root,
+        choice.wifi_ssid,
+        choice.wifi_password or "",
+        choice.server_port,
+        connection_mode=choice.connection_mode,
+        server_ip=choice.server_ip,
+    )
     return config_path, _server_env_path(root)
 
 
@@ -682,11 +873,22 @@ def _cmd_config_integration_test(provider: str) -> int:
     return 0
 
 
-def _write_device_secrets(root: Path, ssid: str, password: str, port: int, connection_mode: str = "wifi") -> Path:
+def _write_device_secrets(
+    root: Path,
+    ssid: str,
+    password: str,
+    port: int,
+    connection_mode: str = "wifi",
+    server_ip: Optional[str] = None,
+) -> Path:
     path = _device_secrets_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    server_ip = _detect_server_ip(root)
+    resolved_server_ip = (server_ip or "").strip()
+    if not resolved_server_ip and connection_mode == "wifi":
+        detected_ip = _detect_server_ip(root)
+        if detected_ip != DEFAULT_SERVER_IP:
+            resolved_server_ip = detected_ip
     content = (
         "// Auto-generated by ccoli CLI.\n"
         "// Local credentials only. Do not commit real secrets.\n\n"
@@ -696,7 +898,7 @@ def _write_device_secrets(root: Path, ssid: str, password: str, port: int, conne
         f'const char* CONNECTION_MODE = "{_escape_cpp_string(connection_mode)}";\n'
         f'const char* SSID = "{_escape_cpp_string(ssid)}";\n'
         f'const char* PASS = "{_escape_cpp_string(password)}";\n'
-        f'const char* SERVER_IP = "{_escape_cpp_string(server_ip)}";\n'
+        f'const char* SERVER_IP = "{_escape_cpp_string(resolved_server_ip)}";\n'
         f"const uint16_t SERVER_PORT = {port};\n\n"
         "#endif  // DEVICE_SECRETS_H\n"
     )
@@ -900,6 +1102,11 @@ def _cmd_setup(
     model: Optional[str],
     api_key: Optional[str],
     stt_device: Optional[str],
+    connection_mode: Optional[str],
+    wifi_ssid: Optional[str],
+    wifi_password: Optional[str],
+    server_ip: Optional[str],
+    server_port: Optional[int],
     skip_install: bool,
     yes: bool,
 ) -> int:
@@ -907,7 +1114,18 @@ def _cmd_setup(
 
     try:
         if install_target:
-            choice = _build_setup_choice(install_target, provider, model, api_key, stt_device)
+            choice = _build_setup_choice(
+                install_target,
+                provider,
+                model,
+                api_key,
+                stt_device,
+                connection_mode,
+                wifi_ssid,
+                wifi_password,
+                server_ip,
+                server_port,
+            )
         else:
             if not sys.stdin.isatty():
                 print(
@@ -931,10 +1149,12 @@ def _cmd_setup(
             return install_code
 
     config_path, env_path = _apply_setup_choice(root, choice)
+    secrets_path = _device_secrets_path(root)
     if not skip_install:
         _prepare_ollama_model(choice)
 
     print(f"updated: {config_path}")
+    print(f"updated: {secrets_path}")
     if choice.api_key:
         print(f"updated: {env_path}")
     if choice.provider == "ollama":
@@ -943,7 +1163,10 @@ def _cmd_setup(
         if not choice.api_key:
             print("warning: no API key saved yet. Add it to server/.env before starting the server.")
         print(f"cloud provider configured: {choice.provider} ({choice.model})")
-    print("next: run `ccoli start` after flashing the device firmware.")
+    if choice.connection_mode == "wifi":
+        print("next: upload the firmware, confirm SERVER_IP in device_secrets.h, then run `ccoli start`.")
+    else:
+        print("next: run `ccoli start` after flashing the device firmware.")
     return 0
 
 
@@ -983,6 +1206,33 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("cpu", "cuda"),
         default=None,
         help="override STT device selection",
+    )
+    setup_parser.add_argument(
+        "--connection-mode",
+        choices=CONNECTION_MODES,
+        default=None,
+        help="set device connection mode for firmware and server defaults",
+    )
+    setup_parser.add_argument(
+        "--wifi-ssid",
+        default=None,
+        help="wifi ssid to write into device_secrets.h when using --connection-mode wifi",
+    )
+    setup_parser.add_argument(
+        "--wifi-password",
+        default=None,
+        help="wifi password to write into device_secrets.h when using --connection-mode wifi",
+    )
+    setup_parser.add_argument(
+        "--server-ip",
+        default=None,
+        help="server LAN IP/hostname for wifi firmware mode",
+    )
+    setup_parser.add_argument(
+        "--server-port",
+        type=int,
+        default=None,
+        help=f"server/device port to write during setup (default: {DEFAULT_SERVER_PORT})",
     )
     setup_parser.add_argument(
         "--skip-install",
@@ -1063,6 +1313,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             args.model,
             args.api_key,
             args.stt_device,
+            args.connection_mode,
+            args.wifi_ssid,
+            args.wifi_password,
+            args.server_ip,
+            args.server_port,
             args.skip_install,
             args.yes,
         )

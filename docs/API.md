@@ -14,6 +14,7 @@ This document describes the current runtime entrypoints and key server modules.
 
 - `ccoli/cli.py`
   - `ccoli setup` / `ccoli install`
+    - LLM install target + device connection mode (`wired` / `wifi`) onboarding
   - `ccoli start`
   - `ccoli config wifi <WiFi Name> password <password> port <port>`
 
