@@ -54,6 +54,10 @@ The setup wizard asks whether you want:
 - `Cloud API` for Gemini / Claude / ChatGPT
 - `Configure Later` if you only want the runtime installed first
 
+During the same `ccoli setup` flow you can also choose:
+- `wired` for USB serial firmware defaults
+- `wifi` to write Wi-Fi credentials and `SERVER_IP` into `device_secrets.h`
+
 It keeps the base install lightweight, then installs only the runtime extras this project actually uses. The default runtime no longer pulls `torch` or `transformers`.
 
 If you want to rerun onboarding later:
@@ -142,6 +146,10 @@ Then connect the Atom Echo to your PC with USB-C.
 ### 4. Optional Wi-Fi mode
 
 ```bash
+ccoli setup
+# choose `wifi` during onboarding
+
+# or update later with:
 ccoli config wifi MyHomeWiFi password MySecretPass port 5001
 ```
 
@@ -194,6 +202,8 @@ Typical flow:
 - Pick your AI path: `Ollama Local`, `Cloud API`, or `Configure Later`
 - If needed, pick the provider and model
 - Pick the STT device (`cpu` on macOS by default)
+- Pick the device connection mode (`wired` or `wifi`)
+- If needed, enter Wi-Fi SSID/password and the server IP
 - Review the generated setup plan in the terminal
 - Confirm, then start with `ccoli start`
 
@@ -224,11 +234,18 @@ Choose STT device
   2. cuda  - Use NVIDIA CUDA when available
 Select [1]: 1
 
+Choose device connection
+  1. wired - USB serial, no Wi-Fi credentials required
+  2. wifi  - Write Wi-Fi credentials and server IP to device_secrets.h
+Select [1]: 1
+
 Setup Plan
 - Install target: api
 - Provider: gemini
 - Model: gemini-1.5-flash
 - STT device: cpu
+- Device connection: wired
+- Server port: 5001
 - Python extras: runtime
 Continue with this setup plan? [Y/n]: y
 
