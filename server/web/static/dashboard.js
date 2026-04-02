@@ -24,9 +24,9 @@ const COPY = {
       logs: { label: "Logs", body: "Live stream" },
     },
     top: {
-      kicker: "multilingual dashboard",
-      title: "Runtime status at a glance.",
-      body: "Multilingual UI — layout adapts to en, ko, ja, zh.",
+      kicker: "command center",
+      title: "ccoli voice runtime",
+      body: "STT · LLM · TTS pipeline status and controls.",
       localeLabel: "Language",
       reconnect: "Reconnect",
       refresh: "Refresh",
@@ -205,9 +205,9 @@ const COPY = {
       logs: { label: "로그", body: "실시간 스트림" },
     },
     top: {
-      kicker: "다국어 대시보드",
-      title: "런타임 상태 한눈에.",
-      body: "다국어 UI — en, ko, ja, zh 지원.",
+      kicker: "제어실",
+      title: "ccoli 음성 런타임",
+      body: "STT · LLM · TTS 파이프라인 상태와 제어.",
       localeLabel: "언어",
       reconnect: "재연결",
       refresh: "새로고침",
@@ -381,9 +381,9 @@ const COPY = {
       logs: { label: "ログ", body: "ライブ出力" },
     },
     top: {
-      kicker: "多言語ダッシュボード",
-      title: "ランタイム状態を一目で。",
-      body: "多言語UI — en, ko, ja, zh対応。",
+      kicker: "制御室",
+      title: "ccoli 音声ランタイム",
+      body: "STT · LLM · TTS パイプラインの状態と制御。",
       localeLabel: "言語",
       reconnect: "再接続",
       refresh: "更新",
@@ -557,9 +557,9 @@ const COPY = {
       logs: { label: "日志", body: "实时输出" },
     },
     top: {
-      kicker: "多语言仪表板",
-      title: "运行时状态一目了然。",
-      body: "多语言UI — 支持en, ko, ja, zh。",
+      kicker: "控制室",
+      title: "ccoli 语音运行时",
+      body: "STT · LLM · TTS 管道状态与控制。",
       localeLabel: "语言",
       reconnect: "重新连接",
       refresh: "刷新",
@@ -721,7 +721,7 @@ const STATE = {
   locale: normalizeLocale(localStorage.getItem("ccoli.locale") || "en"),
   tab: normalizeTab(localStorage.getItem("ccoli.activeTab") || "overview"),
   token: localStorage.getItem("ccoli.authToken") || "",
-  theme: localStorage.getItem("ccoli.theme") || "light",
+  theme: localStorage.getItem("ccoli.theme") || "dark",
   memoryFile: localStorage.getItem("ccoli.activeMemory") || "Soul.md",
   status: null,
   diagnostics: null,
@@ -921,7 +921,11 @@ function openTab(tab) {
 
 function applyTheme(theme) {
   STATE.theme = theme;
-  document.documentElement.setAttribute("data-theme", theme);
+  if (theme === "light") {
+    document.documentElement.setAttribute("data-theme", "light");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
   const icon = $("#theme-icon");
   if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
 }
@@ -1516,6 +1520,8 @@ function renderStatus() {
   const status = STATE.status || {};
   const diagnostics = STATE.diagnostics || {};
   const connection = diagnostics.connection || {};
+  const stt = diagnostics.stt || {};
+  const runtime = diagnostics.runtime || {};
   const mode = status.mode || "agent";
   const emotion = status.emotion || "neutral";
   const conversationCount = Number(status.conversation_count || 0);
@@ -1533,6 +1539,17 @@ function renderStatus() {
   $("#metric-emotion").textContent = emotionLabel(emotion);
   $("#metric-conversation").textContent = formatNumber(conversationCount);
   $("#metric-connection").textContent = connection.connected ? transportLabel(connection.current_transport) : t("common.disconnected");
+
+  /* ── Top metrics bar ── */
+  const warmup = runtime.warmup || {};
+  const barStt = $("#bar-stt .bar-metric-value");
+  const barLlm = $("#bar-llm .bar-metric-value");
+  const barConn = $("#bar-connection .bar-metric-value");
+  const barMode = $("#bar-mode .bar-metric-value");
+  if (barStt) { barStt.textContent = warmup.stt_ready ? "Ready" : "—"; barStt.className = "bar-metric-value" + (warmup.stt_ready ? "" : " warn"); }
+  if (barLlm) { barLlm.textContent = warmup.tts_ready ? "Ready" : "—"; barLlm.className = "bar-metric-value" + (warmup.tts_ready ? "" : " warn"); }
+  if (barConn) { barConn.textContent = connection.connected ? transportLabel(connection.current_transport) : "—"; barConn.className = "bar-metric-value" + (connection.connected ? "" : " error"); }
+  if (barMode) { barMode.textContent = modeLabel(mode); }
 }
 
 function sidebarSummary(status, connection) {
@@ -1572,17 +1589,17 @@ function heroDescription(status, connection) {
   }
   if (status.mode === "robot") {
     return localePhrase(
-      "The layout keeps long explanations in the body text while the hero headline stays compact.",
-      "긴 설명은 본문으로 보내고, hero 제목은 짧게 유지합니다.",
-      "長い説明は本文に置き、hero 見出しは短く保ちます。",
-      "较长说明放在正文中，hero 标题保持简短。"
+      "Servo and display actions are routed through the companion controller.",
+      "서보와 디스플레이 동작이 컴패니언 컨트롤러를 통해 전달됩니다.",
+      "サーボとディスプレイの動作はコンパニオンコントローラー経由で送信されます。",
+      "伺服和显示操作通过伴侣控制器路由。"
     );
   }
   return localePhrase(
-    "The interface can switch locale without changing runtime language defaults.",
-    "화면 언어는 바뀌어도 런타임 언어 기본값은 그대로 유지됩니다.",
-    "UI 言語を切り替えてもランタイム言語の既定値は変わりません。",
-    "切换界面语言不会改变运行时语言默认值。"
+    "Connect the Atom Echo via USB or Wi-Fi to start a voice session.",
+    "Atom Echo를 USB 또는 Wi-Fi로 연결하면 음성 세션이 시작됩니다.",
+    "Atom Echo を USB または Wi-Fi で接続すると音声セッションが開始されます。",
+    "通过 USB 或 Wi-Fi 连接 Atom Echo 以开始语音会话。"
   );
 }
 

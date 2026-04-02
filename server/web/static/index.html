@@ -4,11 +4,43 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ccoli dashboard</title>
-<link rel="icon" type="image/png" href="/brand-assets/ccoli.png">
+<link rel="icon" type="image/svg+xml" href="/brand-assets/ccoli.svg">
 <link rel="stylesheet" href="/dashboard.css">
 <script defer src="/dashboard.js"></script>
 </head>
 <body>
+  <div class="top-metrics-bar" id="top-metrics-bar">
+    <div class="metrics-bar-left">
+      <img src="/brand-assets/ccoli.svg" alt="ccoli" class="bar-logo">
+      <span class="bar-brand">ccoli</span>
+      <span class="status-pill live-pill bar-status">
+        <span class="dot" id="ws-dot"></span>
+        <span id="ws-label"></span>
+      </span>
+    </div>
+    <div class="metrics-bar-items">
+      <span class="bar-metric" id="bar-stt"><span class="bar-metric-label">STT</span> <span class="bar-metric-value">—</span></span>
+      <span class="bar-metric" id="bar-llm"><span class="bar-metric-label">LLM</span> <span class="bar-metric-value">—</span></span>
+      <span class="bar-metric" id="bar-connection"><span class="bar-metric-label">Link</span> <span class="bar-metric-value">—</span></span>
+      <span class="bar-metric" id="bar-mode"><span class="bar-metric-label">Mode</span> <span class="bar-metric-value">—</span></span>
+    </div>
+    <div class="metrics-bar-right">
+      <label class="locale-field-inline">
+        <select id="locale-select">
+          <option value="en" data-i18n="locale.options.en"></option>
+          <option value="ko" data-i18n="locale.options.ko"></option>
+          <option value="ja" data-i18n="locale.options.ja"></option>
+          <option value="zh" data-i18n="locale.options.zh"></option>
+        </select>
+      </label>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode">
+        <span class="theme-toggle-icon" id="theme-icon">🌙</span>
+      </button>
+      <button class="btn ghost small" id="connect-ws" type="button" data-i18n="top.reconnect"></button>
+      <button class="btn primary small" id="refresh-all" type="button" data-i18n="top.refresh"></button>
+    </div>
+  </div>
+
   <div class="page-shell">
     <aside class="sidebar surface">
       <div class="brand-lockup">
@@ -56,15 +88,6 @@
       </nav>
 
       <section class="status-stack">
-        <div class="status-row">
-          <div class="status-pill live-pill">
-            <span class="dot" id="ws-dot"></span>
-            <span id="ws-label"></span>
-          </div>
-          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode">
-            <span class="theme-toggle-icon" id="theme-icon">🌙</span>
-          </button>
-        </div>
         <div class="chip-wrap">
           <span class="status-pill" id="mode-chip"></span>
           <span class="status-pill" id="emotion-chip"></span>
@@ -77,24 +100,8 @@
     <main class="workspace">
       <header class="topbar surface">
         <div class="topbar-copy">
-          <p class="kicker" data-i18n="top.kicker"></p>
-          <h2 class="title-clamp" data-i18n="top.title"></h2>
-          <p class="body-copy" data-i18n="top.body"></p>
-        </div>
-        <div class="topbar-actions">
-          <label class="locale-field">
-            <span class="field-label" data-i18n="top.localeLabel"></span>
-            <select id="locale-select">
-              <option value="en" data-i18n="locale.options.en"></option>
-              <option value="ko" data-i18n="locale.options.ko"></option>
-              <option value="ja" data-i18n="locale.options.ja"></option>
-              <option value="zh" data-i18n="locale.options.zh"></option>
-            </select>
-          </label>
-          <div class="action-wrap">
-            <button class="btn secondary" id="connect-ws" type="button" data-i18n="top.reconnect"></button>
-            <button class="btn primary" id="refresh-all" type="button" data-i18n="top.refresh"></button>
-          </div>
+          <h2 class="title-clamp" id="topbar-tab-title" data-i18n="top.title"></h2>
+          <p class="body-copy" id="topbar-tab-body" data-i18n="top.body"></p>
         </div>
       </header>
 
@@ -113,7 +120,7 @@
           </div>
           <div class="hero-figure">
             <div class="hero-note body-copy" id="hero-note"></div>
-            <img src="/brand-assets/ccoli.png" alt="ccoli broccoli mascot" id="hero-mascot">
+            <img src="/brand-assets/ccoli.svg" alt="ccoli broccoli mascot" id="hero-mascot">
           </div>
         </article>
 
