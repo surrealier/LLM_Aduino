@@ -30,7 +30,7 @@ DEFAULT_SERVER_PORT = 5001
 DEFAULT_SERVER_IP = "YOUR_SERVER_IP"
 DEFAULT_LLM_MODELS = {
     "ollama": "qwen3:8b",
-    "gemini": "gemini-1.5-flash",
+    "gemini": "gemini-2.5-flash-lite",
     "claude": "claude-3-5-haiku-latest",
     "chatgpt": "gpt-4o-mini",
 }
