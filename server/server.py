@@ -1034,7 +1034,11 @@ def main():
     llm_config = config.get_llm_config()
     runtime_controller = RuntimeController(config)
     if any(bucket in runtime_controller.preferences.llm_priority for bucket in ("ollama", "ollama_cpu")):
-        ensure_ollama_running(llm_config.get("base_url", "http://localhost:11434"), llm_config)
+        install_target = config.get("setup", "install_target", default="ollama")
+        if install_target != "api":
+            ensure_ollama_running(llm_config.get("base_url", "http://localhost:11434"), llm_config)
+        else:
+            log.info("Skipping Ollama startup (install_target=api)")
 
     llm_client = PriorityLLMClient(llm_config, runtime_controller.preferences)
     shared_emotion_system = EmotionSystem()

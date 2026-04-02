@@ -44,7 +44,7 @@ class LLMClient:
         self,
         messages: list,
         temperature: float = 0.8,
-        max_tokens: int = 256,
+        max_tokens: int = 512,
         think: ThinkType = None,
     ) -> str:
         """LLM chat request. messages format: [{"role": ..., "content": ...}, ...]."""
@@ -216,8 +216,13 @@ class LLMClient:
         candidates = data.get("candidates") or []
         if not candidates:
             return ""
-        candidate_content = (candidates[0].get("content") or {}).get("parts") or []
-        return "".join(part.get("text", "") for part in candidate_content if isinstance(part, dict)).strip()
+        candidate = candidates[0]
+        finish_reason = (candidate.get("finishReason") or "").upper()
+        candidate_content = (candidate.get("content") or {}).get("parts") or []
+        text = "".join(part.get("text", "") for part in candidate_content if isinstance(part, dict)).strip()
+        if text and finish_reason == "MAX_TOKENS":
+            log.warning("Gemini response truncated (finishReason=MAX_TOKENS, max_tokens=%d)", max_tokens)
+        return text
 
     def _chat_once(
         self,
@@ -465,7 +470,7 @@ class PriorityLLMClient:
         self,
         messages: list,
         temperature: float = 0.8,
-        max_tokens: int = 256,
+        max_tokens: int = 512,
         think: ThinkType = None,
     ) -> str:
         self._clear_error_state()

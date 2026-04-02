@@ -22,8 +22,8 @@ def test_dashboard_css_preserves_text_safe_layout_rules():
     css = (STATIC_DIR / "dashboard.css").read_text(encoding="utf-8")
     js = (STATIC_DIR / "dashboard.js").read_text(encoding="utf-8")
 
-    assert ".title-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}" in css
-    assert ".body-copy{font-size:.95rem;line-height:1.6;color:var(--muted)}" in css
+    assert ".title-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" in css
+    assert ".body-copy{font-size:.82rem;line-height:1.5;color:var(--muted)}" in css
     assert "overflow-wrap:anywhere" in css
     assert ".hero-figure" in css
     assert 'localStorage.getItem("ccoli.locale") || "en"' in js

@@ -10,8 +10,8 @@ const COPY = {
     meta: { title: "ccoli dashboard" },
     brand: {
       kicker: "ccoli dashboard",
-      title: "A calmer control room for voice runtime work.",
-      body: "English is the default UI. Switch the interface language without changing STT, TTS, or assistant response defaults.",
+      title: "Voice runtime control room.",
+      body: "Switch UI language below. STT/TTS defaults stay unchanged.",
     },
     locale: { options: { en: "English", ko: "Korean", ja: "Japanese", zh: "Chinese" } },
     nav: {
@@ -25,11 +25,11 @@ const COPY = {
     },
     top: {
       kicker: "multilingual dashboard",
-      title: "Runtime status with room to breathe.",
-      body: "Short titles stay short. Longer explanations move into body text so the layout holds across English, Korean, Japanese, and Chinese.",
+      title: "Runtime status at a glance.",
+      body: "Multilingual UI — layout adapts to en, ko, ja, zh.",
       localeLabel: "Language",
-      reconnect: "Reconnect live",
-      refresh: "Refresh all",
+      reconnect: "Reconnect",
+      refresh: "Refresh",
     },
     overview: {
       heroKicker: "overview",
@@ -46,35 +46,35 @@ const COPY = {
     },
     diagnostics: {
       kicker: "diagnostics",
-      title: "Safe runtime diagnostics and minimal controls.",
-      body: "Use curated settings here instead of patching raw config values by hand.",
+      title: "Runtime diagnostics and controls.",
+      body: "Curated settings — no raw config patching.",
       refresh: "Refresh diagnostics",
       check: "Run check",
       save: "Save changes",
       stt: {
         title: "STT",
-        body: "Review runtime device selection, model size, and active notes.",
+        body: "Device, model size, and runtime notes.",
         device: "Configured device",
         modelSize: "Model size",
       },
       connection: {
         title: "Connection",
-        body: "Inspect transport status and update the preferred connection mode.",
+        body: "Transport status and preferred mode.",
         mode: "Connection mode",
       },
       integrations: {
         title: "Integrations",
-        body: "Health checks and enable or disable controls stay here.",
+        body: "Health checks and toggle controls.",
         refresh: "Refresh integrations",
       },
       checkResults: {
         title: "Recent checks",
-        body: "Lightweight checks are stored here for quick review.",
+        body: "Quick review of past results.",
         llmAction: "Check LLM",
       },
       advanced: {
         title: "Advanced",
-        body: "Token storage and raw config snapshot are still available, but no longer drive the main workflow.",
+        body: "Token and raw config snapshot.",
         token: "X-Auth-Token",
         tokenPlaceholder: "Enter the dashboard token if authentication is enabled.",
         saveToken: "Save token",
@@ -91,8 +91,8 @@ const COPY = {
     },
     memory: {
       kicker: "memory",
-      title: "Edit the assistant memory files directly.",
-      body: "Titles stay compact while the full content lives in the editor.",
+      title: "Edit assistant memory files.",
+      body: "Select a file, edit in-place.",
       reload: "Reload file",
       save: "Save memory",
       filesTitle: "Files",
@@ -100,8 +100,8 @@ const COPY = {
     },
     conversation: {
       kicker: "conversation",
-      title: "Review turn history and speaker context.",
-      body: "Filter by speaker and keep long utterances in the body area.",
+      title: "Turn history and speakers.",
+      body: "Filter by speaker or scroll through recent turns.",
       refresh: "Refresh history",
       clear: "Clear history",
       filters: {
@@ -112,8 +112,8 @@ const COPY = {
     },
     schedules: {
       kicker: "schedules",
-      title: "Manage reminders in one place.",
-      body: "Long schedule descriptions stay in body text instead of the title line.",
+      title: "Reminders in one place.",
+      body: "Add, complete, or delete schedules.",
       refresh: "Refresh schedules",
       add: "Add schedule",
       fields: {
@@ -128,9 +128,9 @@ const COPY = {
     chat: {
       kicker: "chat",
       title: "Talk to ccoli from the browser.",
-      body: "Web chat stays available while the diagnostics view handles runtime settings.",
+      body: "Web chat via /api/chat.",
       composeTitle: "Send a message",
-      composeBody: "Chat uses `/api/chat` and keeps the last messages in this browser session.",
+      composeBody: "Messages stay in this browser session.",
       speaker: "speaker_id",
       message: "Message",
       messagePlaceholder: "Type a message for ccoli.",
@@ -139,8 +139,8 @@ const COPY = {
     },
     logs: {
       kicker: "logs",
-      title: "Follow the live runtime stream.",
-      body: "Use the filter to narrow long output without changing the stored logs.",
+      title: "Live runtime stream.",
+      body: "Filter to narrow output.",
       refresh: "Refresh logs",
       tail: "Recent line count",
       filter: "Filter",
@@ -191,8 +191,8 @@ const COPY = {
     meta: { title: "ccoli dashboard" },
     brand: {
       kicker: "ccoli 대시보드",
-      title: "음성 런타임을 차분하게 다루는 제어실.",
-      body: "기본 UI는 English이며, 화면 언어만 전환합니다. STT, TTS, 응답 언어 기본값은 자동으로 바뀌지 않습니다.",
+      title: "음성 런타임 제어실.",
+      body: "UI 언어만 전환합니다. STT/TTS 기본값은 유지.",
     },
     locale: { options: { en: "English", ko: "한국어", ja: "日本語", zh: "中文" } },
     nav: {
@@ -206,11 +206,11 @@ const COPY = {
     },
     top: {
       kicker: "다국어 대시보드",
-      title: "여백이 살아 있는 런타임 상태 화면.",
-      body: "짧은 제목은 짧게 유지하고, 긴 설명은 본문으로 내려 여러 언어에서도 레이아웃을 지킵니다.",
+      title: "런타임 상태 한눈에.",
+      body: "다국어 UI — en, ko, ja, zh 지원.",
       localeLabel: "언어",
-      reconnect: "실시간 재연결",
-      refresh: "전체 새로고침",
+      reconnect: "재연결",
+      refresh: "새로고침",
     },
     overview: {
       heroKicker: "개요",
@@ -222,35 +222,35 @@ const COPY = {
     },
     diagnostics: {
       kicker: "진단",
-      title: "안전한 런타임 진단과 최소 설정 제어.",
-      body: "이제 raw config patch 대신 의미가 분명한 제어만 제공합니다.",
+      title: "런타임 진단과 설정.",
+      body: "정리된 설정만 제공합니다.",
       refresh: "진단 새로고침",
       check: "점검 실행",
       save: "변경 저장",
       stt: {
         title: "STT",
-        body: "디바이스 선택, 모델 크기, 런타임 메모를 확인합니다.",
+        body: "디바이스, 모델 크기, 런타임 메모.",
         device: "설정 디바이스",
         modelSize: "모델 크기",
       },
       connection: {
         title: "연결",
-        body: "전송 경로 상태를 확인하고 기본 연결 모드를 바꿉니다.",
+        body: "전송 상태와 기본 모드.",
         mode: "연결 모드",
       },
       integrations: {
         title: "연동",
-        body: "헬스 체크와 활성화 제어를 여기서 관리합니다.",
+        body: "헬스 체크와 활성화 제어.",
         refresh: "연동 새로고침",
       },
       checkResults: {
         title: "최근 점검",
-        body: "가벼운 점검 결과를 여기 보관합니다.",
+        body: "점검 결과 빠른 확인.",
         llmAction: "LLM 점검",
       },
       advanced: {
         title: "고급",
-        body: "토큰 저장과 raw config 스냅샷은 남겨 두되, 메인 흐름에서는 뒤로 뺐습니다.",
+        body: "토큰과 raw config 스냅샷.",
         token: "X-Auth-Token",
         tokenPlaceholder: "인증이 켜져 있다면 토큰을 입력하세요.",
         saveToken: "토큰 저장",
@@ -267,8 +267,8 @@ const COPY = {
     },
     memory: {
       kicker: "메모리",
-      title: "어시스턴트 메모리 파일을 직접 편집합니다.",
-      body: "제목은 짧게, 긴 내용은 편집기 안에서 다룹니다.",
+      title: "어시스턴트 메모리 파일 편집.",
+      body: "파일 선택 후 바로 편집.",
       reload: "파일 다시 읽기",
       save: "메모리 저장",
       filesTitle: "파일 목록",
@@ -276,8 +276,8 @@ const COPY = {
     },
     conversation: {
       kicker: "대화",
-      title: "대화 히스토리와 화자 맥락을 확인합니다.",
-      body: "화자별로 필터링하고 긴 발화는 본문 영역에서 읽습니다.",
+      title: "대화 히스토리와 화자.",
+      body: "화자별 필터링, 최근 턴 확인.",
       refresh: "히스토리 새로고침",
       clear: "히스토리 비우기",
       filters: {
@@ -288,8 +288,8 @@ const COPY = {
     },
     schedules: {
       kicker: "일정",
-      title: "리마인더를 한 곳에서 관리합니다.",
-      body: "긴 설명은 제목이 아니라 본문에 둡니다.",
+      title: "리마인더 관리.",
+      body: "일정 추가, 완료, 삭제.",
       refresh: "일정 새로고침",
       add: "일정 추가",
       fields: {
@@ -303,10 +303,10 @@ const COPY = {
     },
     chat: {
       kicker: "채팅",
-      title: "브라우저에서 ccoli와 대화합니다.",
-      body: "런타임 설정은 Diagnostics로 옮기고, 이 화면은 대화에 집중합니다.",
+      title: "브라우저에서 ccoli와 대화.",
+      body: "/api/chat 기반 웹 채팅.",
       composeTitle: "메시지 보내기",
-      composeBody: "웹 채팅은 `/api/chat`을 사용하고 현재 브라우저 세션에 최근 메시지를 유지합니다.",
+      composeBody: "현재 브라우저 세션에 메시지 유지.",
       speaker: "speaker_id",
       message: "메시지",
       messagePlaceholder: "ccoli에게 보낼 메시지를 입력하세요.",
@@ -315,8 +315,8 @@ const COPY = {
     },
     logs: {
       kicker: "로그",
-      title: "실시간 런타임 스트림을 확인합니다.",
-      body: "필터로 긴 출력을 좁혀 볼 수 있습니다.",
+      title: "실시간 런타임 스트림.",
+      body: "필터로 출력 범위 축소.",
       refresh: "로그 새로고침",
       tail: "최근 줄 수",
       filter: "필터",
@@ -367,8 +367,8 @@ const COPY = {
     meta: { title: "ccoli dashboard" },
     brand: {
       kicker: "ccoli ダッシュボード",
-      title: "音声ランタイムを静かに扱うコントロールルーム。",
-      body: "既定 UI は English です。画面言語だけを切り替え、STT・TTS・応答言語の既定値は変えません。",
+      title: "音声ランタイム制御室。",
+      body: "UI言語のみ切替。STT/TTSの既定値は維持。",
     },
     locale: { options: { en: "English", ko: "韓国語", ja: "日本語", zh: "中国語" } },
     nav: {
@@ -382,11 +382,11 @@ const COPY = {
     },
     top: {
       kicker: "多言語ダッシュボード",
-      title: "余白を保ったランタイム画面。",
-      body: "短い見出しは短く保ち、長い説明は本文へ移して各言語でもレイアウトを守ります。",
+      title: "ランタイム状態を一目で。",
+      body: "多言語UI — en, ko, ja, zh対応。",
       localeLabel: "言語",
-      reconnect: "ライブ再接続",
-      refresh: "全体更新",
+      reconnect: "再接続",
+      refresh: "更新",
     },
     overview: {
       heroKicker: "概要",
@@ -398,35 +398,35 @@ const COPY = {
     },
     diagnostics: {
       kicker: "診断",
-      title: "安全な診断と最小限の設定操作。",
-      body: "意味の分かる設定だけを残し、raw config patch は前面から外しました。",
+      title: "ランタイム診断と設定。",
+      body: "整理された設定のみ提供。",
       refresh: "診断を更新",
       check: "チェック実行",
       save: "変更を保存",
       stt: {
         title: "STT",
-        body: "デバイス選択、モデルサイズ、ランタイムメモを確認します。",
+        body: "デバイス、モデルサイズ、メモ。",
         device: "設定デバイス",
         modelSize: "モデルサイズ",
       },
       connection: {
         title: "接続",
-        body: "転送経路の状態を確認し、基本接続モードを変更します。",
+        body: "転送状態と基本モード。",
         mode: "接続モード",
       },
       integrations: {
         title: "連携",
-        body: "ヘルスチェックと有効化をここで管理します。",
+        body: "ヘルスチェックと有効化。",
         refresh: "連携を更新",
       },
       checkResults: {
         title: "最近のチェック",
-        body: "軽量チェック結果をここに保持します。",
+        body: "結果の簡易確認。",
         llmAction: "LLM を確認",
       },
       advanced: {
         title: "詳細設定",
-        body: "トークン保存と raw config スナップショットは残しますが、主導線からは外しています。",
+        body: "トークンとraw configスナップショット。",
         token: "X-Auth-Token",
         tokenPlaceholder: "認証が有効ならトークンを入力してください。",
         saveToken: "トークン保存",
@@ -443,8 +443,8 @@ const COPY = {
     },
     memory: {
       kicker: "メモリ",
-      title: "アシスタントのメモリファイルを直接編集します。",
-      body: "見出しは短く、長い内容はエディタ側で扱います。",
+      title: "メモリファイル編集。",
+      body: "ファイル選択後、直接編集。",
       reload: "再読み込み",
       save: "メモリ保存",
       filesTitle: "ファイル",
@@ -452,8 +452,8 @@ const COPY = {
     },
     conversation: {
       kicker: "会話",
-      title: "会話履歴と話者コンテキストを確認します。",
-      body: "話者で絞り込み、長い発話は本文領域で読みます。",
+      title: "会話履歴と話者。",
+      body: "話者フィルタ、最近のターン確認。",
       refresh: "履歴更新",
       clear: "履歴削除",
       filters: {
@@ -464,8 +464,8 @@ const COPY = {
     },
     schedules: {
       kicker: "予定",
-      title: "リマインダーを一か所で管理します。",
-      body: "長い説明は見出しではなく本文へ置きます。",
+      title: "リマインダー管理。",
+      body: "予定の追加・完了・削除。",
       refresh: "予定更新",
       add: "予定追加",
       fields: {
@@ -479,10 +479,10 @@ const COPY = {
     },
     chat: {
       kicker: "チャット",
-      title: "ブラウザから ccoli と会話します。",
-      body: "ランタイム設定は Diagnostics に移し、この画面は会話に集中します。",
+      title: "ブラウザからccoliと会話。",
+      body: "/api/chat経由のWebチャット。",
       composeTitle: "メッセージ送信",
-      composeBody: "Web チャットは `/api/chat` を使い、このブラウザに最近のメッセージを保持します。",
+      composeBody: "このブラウザセッションにメッセージ保持。",
       speaker: "speaker_id",
       message: "メッセージ",
       messagePlaceholder: "ccoli へのメッセージを入力してください。",
@@ -491,8 +491,8 @@ const COPY = {
     },
     logs: {
       kicker: "ログ",
-      title: "ライブランタイムストリームを確認します。",
-      body: "フィルタで長い出力を絞り込めます。",
+      title: "ライブランタイムストリーム。",
+      body: "フィルタで出力を絞り込み。",
       refresh: "ログ更新",
       tail: "行数",
       filter: "フィルタ",
@@ -543,8 +543,8 @@ const COPY = {
     meta: { title: "ccoli dashboard" },
     brand: {
       kicker: "ccoli 仪表板",
-      title: "更安静的语音运行时控制室。",
-      body: "默认 UI 为 English。这里只切换界面语言，不自动修改 STT、TTS 或助手回复语言默认值。",
+      title: "语音运行时控制室。",
+      body: "仅切换UI语言。STT/TTS默认值不变。",
     },
     locale: { options: { en: "English", ko: "韩语", ja: "日语", zh: "中文" } },
     nav: {
@@ -558,11 +558,11 @@ const COPY = {
     },
     top: {
       kicker: "多语言仪表板",
-      title: "保留留白的运行时状态界面。",
-      body: "短标题保持短小，较长说明放到正文区域，这样在多种语言下也能维持布局稳定。",
+      title: "运行时状态一目了然。",
+      body: "多语言UI — 支持en, ko, ja, zh。",
       localeLabel: "语言",
-      reconnect: "重新连接实时流",
-      refresh: "全部刷新",
+      reconnect: "重新连接",
+      refresh: "刷新",
     },
     overview: {
       heroKicker: "总览",
@@ -574,35 +574,35 @@ const COPY = {
     },
     diagnostics: {
       kicker: "诊断",
-      title: "安全的运行时诊断与最小控制。",
-      body: "主要流程改为清晰的受控设置，不再依赖手工 patch 原始配置。",
+      title: "运行时诊断与设置。",
+      body: "精简设置，无需手动patch。",
       refresh: "刷新诊断",
       check: "执行检查",
       save: "保存更改",
       stt: {
         title: "STT",
-        body: "查看设备选择、模型大小和运行时说明。",
+        body: "设备、模型大小、运行时说明。",
         device: "配置设备",
         modelSize: "模型大小",
       },
       connection: {
         title: "连接",
-        body: "检查传输状态，并修改首选连接模式。",
+        body: "传输状态与首选模式。",
         mode: "连接模式",
       },
       integrations: {
         title: "集成",
-        body: "健康检查和启用控制都放在这里。",
+        body: "健康检查与启用控制。",
         refresh: "刷新集成",
       },
       checkResults: {
         title: "最近检查",
-        body: "轻量检查结果会保存在这里。",
+        body: "结果快速查看。",
         llmAction: "检查 LLM",
       },
       advanced: {
         title: "高级",
-        body: "保留令牌存储和 raw config 快照，但不再作为主要操作入口。",
+        body: "令牌与raw config快照。",
         token: "X-Auth-Token",
         tokenPlaceholder: "如果启用了认证，请在这里输入令牌。",
         saveToken: "保存令牌",
@@ -619,8 +619,8 @@ const COPY = {
     },
     memory: {
       kicker: "记忆",
-      title: "直接编辑助手记忆文件。",
-      body: "标题保持简短，长内容放在编辑器里。",
+      title: "编辑记忆文件。",
+      body: "选择文件后直接编辑。",
       reload: "重新加载文件",
       save: "保存记忆",
       filesTitle: "文件列表",
@@ -628,8 +628,8 @@ const COPY = {
     },
     conversation: {
       kicker: "对话",
-      title: "查看对话历史和说话人上下文。",
-      body: "可按说话人筛选，较长内容放在正文区域阅读。",
+      title: "对话历史与说话人。",
+      body: "按说话人筛选，查看最近轮次。",
       refresh: "刷新历史",
       clear: "清空历史",
       filters: {
@@ -640,8 +640,8 @@ const COPY = {
     },
     schedules: {
       kicker: "日程",
-      title: "在一个页面管理提醒。",
-      body: "较长说明放在正文，不挤占标题。",
+      title: "提醒管理。",
+      body: "添加、完成、删除日程。",
       refresh: "刷新日程",
       add: "添加日程",
       fields: {
@@ -655,10 +655,10 @@ const COPY = {
     },
     chat: {
       kicker: "聊天",
-      title: "在浏览器里与 ccoli 对话。",
-      body: "运行时设置移到 Diagnostics，这里专注于对话。",
+      title: "在浏览器与ccoli对话。",
+      body: "基于/api/chat的Web聊天。",
       composeTitle: "发送消息",
-      composeBody: "Web chat 使用 `/api/chat`，并在当前浏览器会话中保留最近消息。",
+      composeBody: "消息保留在当前浏览器会话。",
       speaker: "speaker_id",
       message: "消息",
       messagePlaceholder: "输入发给 ccoli 的消息。",
@@ -667,8 +667,8 @@ const COPY = {
     },
     logs: {
       kicker: "日志",
-      title: "查看实时运行时输出。",
-      body: "可用过滤器缩小较长日志范围。",
+      title: "实时运行时输出。",
+      body: "过滤器缩小输出范围。",
       refresh: "刷新日志",
       tail: "最近行数",
       filter: "过滤",
@@ -721,6 +721,7 @@ const STATE = {
   locale: normalizeLocale(localStorage.getItem("ccoli.locale") || "en"),
   tab: normalizeTab(localStorage.getItem("ccoli.activeTab") || "overview"),
   token: localStorage.getItem("ccoli.authToken") || "",
+  theme: localStorage.getItem("ccoli.theme") || "light",
   memoryFile: localStorage.getItem("ccoli.activeMemory") || "Soul.md",
   status: null,
   diagnostics: null,
@@ -741,6 +742,7 @@ const STATE = {
 document.addEventListener("DOMContentLoaded", boot);
 
 function boot() {
+  applyTheme(STATE.theme);
   bind();
   $("#auth-token").value = STATE.token;
   $("#locale-select").value = STATE.locale;
@@ -767,6 +769,7 @@ function bind() {
   });
   $("#refresh-all").addEventListener("click", () => refreshAll());
   $("#connect-ws").addEventListener("click", () => connectWs(true));
+  $("#theme-toggle").addEventListener("click", toggleTheme);
   $("#locale-select").addEventListener("change", (event) => {
     STATE.locale = normalizeLocale(event.target.value);
     localStorage.setItem("ccoli.locale", STATE.locale);
@@ -914,6 +917,19 @@ function openTab(tab) {
   if (STATE.tab === "diagnostics") refreshDiagnostics(true);
   if (STATE.tab === "logs") fetchLogs(true);
   if (STATE.tab === "conversation") fetchConversation(true);
+}
+
+function applyTheme(theme) {
+  STATE.theme = theme;
+  document.documentElement.setAttribute("data-theme", theme);
+  const icon = $("#theme-icon");
+  if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
+}
+
+function toggleTheme() {
+  const next = STATE.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("ccoli.theme", next);
+  applyTheme(next);
 }
 
 async function refreshAll(silent = false) {
@@ -1706,7 +1722,10 @@ function toast(message) {
   node.className = "toast";
   node.textContent = message;
   $("#toasts").appendChild(node);
-  window.setTimeout(() => node.remove(), 2600);
+  window.setTimeout(() => {
+    node.classList.add("removing");
+    window.setTimeout(() => node.remove(), 200);
+  }, 2400);
 }
 
 function normalizeConversation(item) {

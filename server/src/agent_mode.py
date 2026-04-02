@@ -209,7 +209,7 @@ class AgentMode:
         return self.split_text_for_tts(cleaned, max_chunks=max_chunks)
 
     @staticmethod
-    def merge_audio_chunks(audio_chunks: list[bytes], sr: int = 16000, crossfade_ms: float = 12.0) -> bytes:
+    def merge_audio_chunks(audio_chunks: list[bytes], sr: int = 16000, crossfade_ms: float = 20.0) -> bytes:
         """
         여러 PCM16LE 청크를 하나의 오디오로 결합.
         청크 경계 클릭 노이즈를 줄이기 위해 짧은 crossfade를 적용한다.
@@ -252,7 +252,7 @@ class AgentMode:
     def crossfade_audio_boundaries(
         audio_chunks: list[bytes],
         sr: int = 16000,
-        crossfade_ms: float = 12.0,
+        crossfade_ms: float = 20.0,
     ) -> list[bytes]:
         """
         청크 단위 전송을 유지하면서 경계만 crossfade 처리한다.
@@ -626,7 +626,7 @@ class AgentMode:
                     pcm_f32 = (pcm_f32 / peak * 0.90).astype(np.float32, copy=False)
 
             # 청크 경계 클릭 노이즈 완화용 짧은 페이드 인/아웃
-            fade_len = int(sr * 0.004)
+            fade_len = int(sr * 0.008)
             if pcm_f32.size > 2 and fade_len > 0:
                 fade_len = min(fade_len, pcm_f32.size // 2)
                 if fade_len > 0:

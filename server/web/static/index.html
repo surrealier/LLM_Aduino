@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ccoli dashboard</title>
+<link rel="icon" type="image/png" href="/brand-assets/ccoli.png">
 <link rel="stylesheet" href="/dashboard.css">
 <script defer src="/dashboard.js"></script>
 </head>
@@ -18,30 +19,37 @@
 
       <nav class="nav" id="nav">
         <button class="active" data-tab="overview" type="button">
+          <span class="nav-icon" aria-hidden="true">📊</span>
           <strong class="nav-label" data-i18n="nav.overview.label"></strong>
           <span class="nav-meta body-copy" data-i18n="nav.overview.body"></span>
         </button>
         <button data-tab="diagnostics" type="button">
+          <span class="nav-icon" aria-hidden="true">🔧</span>
           <strong class="nav-label" data-i18n="nav.diagnostics.label"></strong>
           <span class="nav-meta body-copy" data-i18n="nav.diagnostics.body"></span>
         </button>
         <button data-tab="memory" type="button">
+          <span class="nav-icon" aria-hidden="true">🧠</span>
           <strong class="nav-label" data-i18n="nav.memory.label"></strong>
           <span class="nav-meta body-copy" data-i18n="nav.memory.body"></span>
         </button>
         <button data-tab="conversation" type="button">
+          <span class="nav-icon" aria-hidden="true">💬</span>
           <strong class="nav-label" data-i18n="nav.conversation.label"></strong>
           <span class="nav-meta body-copy" data-i18n="nav.conversation.body"></span>
         </button>
         <button data-tab="schedules" type="button">
+          <span class="nav-icon" aria-hidden="true">📅</span>
           <strong class="nav-label" data-i18n="nav.schedules.label"></strong>
           <span class="nav-meta body-copy" data-i18n="nav.schedules.body"></span>
         </button>
         <button data-tab="chat" type="button">
+          <span class="nav-icon" aria-hidden="true">✨</span>
           <strong class="nav-label" data-i18n="nav.chat.label"></strong>
           <span class="nav-meta body-copy" data-i18n="nav.chat.body"></span>
         </button>
         <button data-tab="logs" type="button">
+          <span class="nav-icon" aria-hidden="true">📋</span>
           <strong class="nav-label" data-i18n="nav.logs.label"></strong>
           <span class="nav-meta body-copy" data-i18n="nav.logs.body"></span>
         </button>
@@ -53,6 +61,9 @@
             <span class="dot" id="ws-dot"></span>
             <span id="ws-label"></span>
           </div>
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode">
+            <span class="theme-toggle-icon" id="theme-icon">🌙</span>
+          </button>
         </div>
         <div class="chip-wrap">
           <span class="status-pill" id="mode-chip"></span>
