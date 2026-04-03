@@ -131,11 +131,12 @@ void setup() {
   led_init();
   servo_init();
   display_init();
-  display_show_face(FACE_NEUTRAL);
+  display_set_state(DS_BOOT);
   led_show_connecting();
 
   // Start the configured transport (USB wired or Wi-Fi)
   connection_init(&conn_state, SSID, PASS);
+  display_set_state(DS_CONNECTING);
 
   auto spk_cfg = M5.Speaker.config();
   auto mic_cfg = M5.Mic.config();
@@ -180,6 +181,7 @@ void loop() {
   // -- 전송 레이어 자동 감지 및 연결 관리 --
   connection_manage(&conn_state, client);
   if (!connection_transport_ready(&conn_state)) {
+    display_update();
     delay(100);
     return;
   }
@@ -190,6 +192,7 @@ void loop() {
 
   // If server is disconnected, wait 100ms and retry (CPU saving)
   if (!connection_is_server_connected(&conn_state)) {
+    display_update();
     delay(connection_is_wired_mode() ? 10 : 100);
     return;
   }
@@ -233,7 +236,16 @@ void loop() {
     // TTS playback completed -> re-enable mic
     mic_reinit();
     mic_disabled = false;
+    display_set_state(DS_IDLE);
     DEBUG_PRINTLN("[AUDIO] Mic begin (after TTS)");
+  }
+
+  // -- Transition display to IDLE on first server connection --
+  {
+    static bool was_connected = false;
+    bool now_connected = connection_is_server_connected(&conn_state);
+    if (now_connected && !was_connected) display_set_state(DS_IDLE);
+    was_connected = now_connected;
   }
 
   // -- Voice input processing (only when mic is enabled and TTS is not playing) --
@@ -256,23 +268,26 @@ void loop() {
       if (event == VAD_START) {
         // Speech start detected -> LED green + START packet + pre-roll send
         led_set_color(LED_COLOR_RECORDING_R, LED_COLOR_RECORDING_G, LED_COLOR_RECORDING_B);
+        display_set_state(DS_LISTENING);
         if (protocol_send_packet(transport, PTYPE_START, nullptr, 0)) {
           preroll_send(&preroll, transport);
         }
       } else if (event == VAD_CONTINUE) {
         // During speech -> send current frame as AUDIO packet
         protocol_send_packet(transport, PTYPE_AUDIO, (uint8_t*)frame_buf, AUDIO_FRAME_SIZE * sizeof(int16_t));
+        display_set_audio_level((uint8_t)min(255.0f, rms / 128.0f * 255.0f));
       } else if (event == VAD_END) {
         // Speech end -> END packet + LED light green (connected idle)
         protocol_send_packet(transport, PTYPE_END, nullptr, 0);
         led_show_connected();
+        display_set_state(DS_PROCESSING);
       }
     }
   }
 
   // -- Peripheral updates --
   led_update_pattern();  // LED animation pattern
-  display_update();      // OLED face animation + blink (currently placeholder)
+  display_update();      // LCD/OLED face animation + state rendering
   servo_update();        // Servo async action (rotate/wiggle) step processing
   robot_bridge_update();
   delay(1);              // Feed watchdog + yield CPU

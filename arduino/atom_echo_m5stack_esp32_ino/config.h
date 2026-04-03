@@ -26,13 +26,24 @@ extern const uint16_t SERVER_PORT;
 // Predefined (DO NOT REUSE): G19, G22 (I2S SPK), G23, G33 (PDM MIC)
 // Internal: G27 (RGB LED), G39 (Button), G12 (IR TX)
 
-// Optional OLED Display (SSD1306 I2C) — right-side header pins
-// Firmware should still compile without the Adafruit SSD1306 library installed.
+// Display type: 0=none, 1=SSD1306 OLED (I2C), 2=ST7789V2 color LCD (SPI)
+#define DISPLAY_TYPE 2
+
+// SSD1306 OLED (I2C) — only when DISPLAY_TYPE == 1
 #define DISPLAY_SDA_PIN 25
 #define DISPLAY_SCL_PIN 21
 #define DISPLAY_WIDTH   128
 #define DISPLAY_HEIGHT  64
 #define DISPLAY_I2C_ADDR 0x3C
+
+// ST7789V2 Color LCD (SPI) — only when DISPLAY_TYPE == 2
+// Waveshare 1.69" 240x280: DIN=G25 CLK=G21 CS=G26 DC=G32 RST=3V3 BL=5V
+#define LCD_PIN_DIN  25
+#define LCD_PIN_CLK  21
+#define LCD_PIN_CS   26
+#define LCD_PIN_DC   32
+#define LCD_WIDTH    240
+#define LCD_HEIGHT   280
 
 // Companion robot bridge (Phase 1 scaffold)
 // Disabled by default so the legacy direct-servo path keeps working.

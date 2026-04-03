@@ -379,6 +379,8 @@ static void handleCmdJson(const uint8_t* payload, uint16_t len) {
 
     display_show_face(face_from_string(face));
     if (display_text[0]) display_set_status_text(display_text);
+    if (display_text[0]) display_set_speech_text(display_text);
+    display_set_state(DS_SPEAKING);
 
     ServoAction sa = action_from_string(servo_action);
     if (sa != ACTION_NONE) servo_play_action(sa);
@@ -397,6 +399,8 @@ static void handleCmdJson(const uint8_t* payload, uint16_t len) {
     
     display_show_face(face_from_string(face));
     if (display_text[0]) display_set_status_text(display_text);
+    if (display_text[0]) display_set_speech_text(display_text);
+    display_set_state(DS_SPEAKING);
     
     ServoAction sa = action_from_string(servo_action);
     if (sa != ACTION_NONE) servo_play_action(sa);
