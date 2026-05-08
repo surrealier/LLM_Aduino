@@ -7,8 +7,8 @@ stt:
   language: ko
 llm:
   provider: gemini
-  base_url: http://localhost:11434
-  model: gemini-2.5-flash
+  base_url: ''
+  model: gemini-2.5-flash-lite
   ollama_model: qwen2.5:0.5b
   api_models:
     gemini: gemini-2.5-flash
@@ -79,7 +79,7 @@ logging:
   save_to_file: true
   log_dir: logs
 connection:
-  mode: auto
+  mode: wired
   priority:
   - wired
   - wifi
@@ -103,10 +103,11 @@ setup:
   provider: gemini
   python_extras:
   - runtime
-
+  connection_mode: wired
+  server_port: 5001
 web:
   enabled: true
-  host: "0.0.0.0"
+  host: 0.0.0.0
   port: 8005
-  auth_token: ""        # blank = no authentication required
+  auth_token: ''
   log_tail_lines: 200
