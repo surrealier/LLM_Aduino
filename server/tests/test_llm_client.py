@@ -1,3 +1,5 @@
+import logging
+
 import requests
 
 from src.llm_client import LLMClient
@@ -130,6 +132,23 @@ def test_chat_uses_client_default_think(monkeypatch):
     assert calls == [(128, False)]
 
 
+def test_ollama_connection_failure_logs_warning_not_error(monkeypatch, caplog):
+    client = LLMClient("http://localhost:11434", "qwen3:8b")
+
+    def fail_chat_once(*args, **kwargs):
+        raise requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr(client, "_chat_once", fail_chat_once)
+
+    with caplog.at_level(logging.WARNING, logger="src.llm_client"):
+        result = client.chat([{"role": "user", "content": "안녕"}])
+
+    assert result == ""
+    assert client.last_error_code == "provider_error"
+    assert "Ollama API error: connection refused" in caplog.text
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+
+
 class _JsonResponse:
     def __init__(self, payload, status_code=200):
         self._payload = payload
@@ -179,6 +198,42 @@ def test_gemini_provider_calls_google_api(monkeypatch):
 
     assert result == "Gemini 응답"
     assert "generativelanguage.googleapis.com" in captured["url"]
+
+
+def test_gemini_retries_once_when_response_hits_max_tokens(monkeypatch):
+    max_output_tokens = []
+
+    def fake_post(url, json=None, timeout=None):
+        max_output_tokens.append(json["generationConfig"]["maxOutputTokens"])
+        if len(max_output_tokens) == 1:
+            return _JsonResponse(
+                {
+                    "candidates": [
+                        {
+                            "finishReason": "MAX_TOKENS",
+                            "content": {"parts": [{"text": "콜리 연결됐어요! 콜"}]},
+                        }
+                    ]
+                }
+            )
+        return _JsonResponse(
+            {
+                "candidates": [
+                    {
+                        "finishReason": "STOP",
+                        "content": {"parts": [{"text": "콜리 연결됐어요! 아직 일하고 계세요?"}]},
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("src.llm_client.requests.post", fake_post)
+    client = LLMClient("", "gemini-1.5-flash", provider="gemini", api_key="gem-key")
+
+    result = client.chat([{"role": "user", "content": "인사해줘"}], temperature=0.4, max_tokens=80)
+
+    assert result == "콜리 연결됐어요! 아직 일하고 계세요?"
+    assert max_output_tokens == [80, 384]
 
 
 def test_claude_provider_calls_anthropic_api(monkeypatch):

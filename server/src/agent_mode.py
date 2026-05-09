@@ -45,6 +45,7 @@ _CONNECTION_GREETING_PROMPT = """\
 실시간 최근 대화:
 {recent_context}
 """
+_CONNECTION_GREETING_MIN_TAIL_CHARS = 4
 
 
 class AgentMode:
@@ -342,16 +343,28 @@ class AgentMode:
         return f"콜리 연결됐어요! {tail}"
 
     def _normalize_connection_greeting(self, text: str, now: datetime | None = None) -> str:
-        cleaned = self._sanitize_response(text or "")
+        cleaned = " ".join((text or "").split()).strip()
+        cleaned = self._EMOJI_RE.sub("", cleaned)
+        cleaned = self._EMOJI_META_RE.sub("", cleaned)
         cleaned = cleaned.replace("\n", " ").replace('"', "").replace("'", "")
         cleaned = " ".join(cleaned.split()).strip()
 
         if not cleaned:
             return self._fallback_connection_greeting(now)
 
-        cleaned = re.sub(r"^콜리\s*연결됐어요[.!?]?\s*", "", cleaned).strip()
-        cleaned = cleaned.lstrip("!,. ")
+        for _ in range(2):
+            stripped = re.sub(r"^(?:콜리\s*)?연결됐어요[.!?]?\s*", "", cleaned).strip()
+            stripped = stripped.lstrip("!,. ")
+            if stripped == cleaned:
+                break
+            cleaned = stripped
+
+        cleaned = self._sanitize_response(cleaned)
         if not cleaned:
+            return self._fallback_connection_greeting(now)
+
+        compact = re.sub(r"\s+", "", cleaned)
+        if len(compact) < _CONNECTION_GREETING_MIN_TAIL_CHARS:
             return self._fallback_connection_greeting(now)
 
         return f"콜리 연결됐어요! {cleaned}"
@@ -372,7 +385,7 @@ class AgentMode:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.6,
-                max_tokens=80,
+                max_tokens=160,
                 think=False,
             )
             return self._normalize_connection_greeting(raw, now=now)
