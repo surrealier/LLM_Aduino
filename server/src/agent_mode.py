@@ -46,6 +46,7 @@ _CONNECTION_GREETING_PROMPT = """\
 {recent_context}
 """
 _CONNECTION_GREETING_MIN_TAIL_CHARS = 4
+_CONNECTION_GREETING_TERMINAL_RE = re.compile(r"[.!?。！？]$")
 
 
 class AgentMode:
@@ -367,7 +368,18 @@ class AgentMode:
         if len(compact) < _CONNECTION_GREETING_MIN_TAIL_CHARS:
             return self._fallback_connection_greeting(now)
 
+        cleaned = self._complete_connection_greeting_tail(cleaned)
         return f"콜리 연결됐어요! {cleaned}"
+
+    @staticmethod
+    def _complete_connection_greeting_tail(text: str) -> str:
+        cleaned = (text or "").strip()
+        if not cleaned or _CONNECTION_GREETING_TERMINAL_RE.search(cleaned):
+            return cleaned
+
+        if re.search(r"(신가|인가|건가|던가)$", cleaned):
+            return f"{cleaned}요?"
+        return f"{cleaned}?"
 
     def generate_connection_greeting(self, now: datetime | None = None) -> str:
         now = now or datetime.now()

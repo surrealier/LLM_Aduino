@@ -144,6 +144,24 @@ def test_generate_connection_greeting_falls_back_when_llm_tail_is_fragment():
     assert greeting == "콜리 연결됐어요! 잠 잘 주무셨어요?"
 
 
+def test_generate_connection_greeting_completes_unpunctuated_question_tail():
+    class _FakeMemory:
+        def build_system_prompt(self):
+            return "기억된 메모"
+
+    class _FakeLLM:
+        def chat(self, messages, **kwargs):
+            return "콜리 연결됐어요! 편안한 밤 보내고 계신가"
+
+    agent = _make_agent()
+    agent.memory = _FakeMemory()
+    agent.llm = _FakeLLM()
+
+    greeting = agent.generate_connection_greeting()
+
+    assert greeting == "콜리 연결됐어요! 편안한 밤 보내고 계신가요?"
+
+
 def test_generate_connection_greeting_falls_back_by_time():
     agent = _make_agent()
     agent.llm = None
