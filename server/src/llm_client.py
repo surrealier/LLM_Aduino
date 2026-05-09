@@ -134,7 +134,7 @@ class LLMClient:
             return content.strip()
         except Exception as exc:
             self._remember_error("provider_error", str(exc))
-            log.error("Ollama API error: %s", exc)
+            log.warning("Ollama API error: %s", exc)
             return ""
 
     def _chat_external(self, messages: list, temperature: float, max_tokens: int) -> str:
@@ -230,6 +230,12 @@ class LLMClient:
         return "".join(text_parts).strip()
 
     def _chat_gemini(self, messages: list, temperature: float, max_tokens: int) -> str:
+        text, finish_reason = self._chat_gemini_once(messages, temperature, max_tokens)
+        if text and finish_reason == "MAX_TOKENS":
+            log.warning("Gemini response truncated (finishReason=MAX_TOKENS, max_tokens=%d)", max_tokens)
+        return text
+
+    def _chat_gemini_once(self, messages: list, temperature: float, max_tokens: int) -> tuple[str, str]:
         if not self.api_key:
             raise RuntimeError("GEMINI_API_KEY is missing")
 
@@ -256,15 +262,13 @@ class LLMClient:
         data = response.json()
         candidates = data.get("candidates") or []
         if not candidates:
-            return ""
+            return "", ""
         candidate = candidates[0]
         finish_reason = (candidate.get("finishReason") or "").upper()
         self._remember_finish_reason(finish_reason)
         candidate_content = (candidate.get("content") or {}).get("parts") or []
         text = "".join(part.get("text", "") for part in candidate_content if isinstance(part, dict)).strip()
-        if text and finish_reason == "MAX_TOKENS":
-            log.warning("Gemini response truncated (finishReason=MAX_TOKENS, max_tokens=%d)", max_tokens)
-        return text
+        return text, finish_reason
 
     def _chat_once(
         self,
@@ -353,7 +357,7 @@ class LLMClient:
             if isinstance(data, dict):
                 return (data.get("response") or "").strip()
         except Exception as exc:
-            log.error("Ollama generate fallback error: %s", exc)
+            log.warning("Ollama generate fallback error: %s", exc)
         return ""
 
     @staticmethod
