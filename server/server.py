@@ -5,6 +5,7 @@ Main ESP32 voice streaming server module
 - Sends commands and voice responses over TCP socket communication
 """
 import logging
+import json
 import os
 import signal
 import socket
@@ -32,6 +33,7 @@ from src.llm_client import PriorityLLMClient
 from src.logging_setup import get_performance_logger, setup_logging
 from src.protocol import (
     PTYPE_AUDIO,
+    PTYPE_BUFFER_STATUS,
     PTYPE_END,
     PTYPE_PING,
     PTYPE_START,
@@ -451,6 +453,26 @@ def _prime_connection(conn, addr, send_lock: threading.Lock) -> bool:
     else:
         log.warning("Failed to prime wired serial link on %s", addr[1])
     return ok
+
+
+def _handle_buffer_status_payload(payload: bytes, log=None) -> dict | None:
+    log = log or __import__("logging").getLogger("server")
+    try:
+        status = json.loads(payload.decode("utf-8"))
+    except Exception as exc:
+        log.warning("Invalid ESP32 buffer status payload: %s", exc)
+        return None
+
+    if not isinstance(status, dict):
+        log.warning("Invalid ESP32 buffer status payload type: %s", type(status).__name__)
+        return None
+
+    event = str(status.get("event", "") or "")
+    if event in {"ring_drop", "playraw_fail", "ring_push_failed"}:
+        log.warning("ESP32 audio buffer status: %s", status)
+    else:
+        log.info("ESP32 audio buffer status: %s", status)
+    return status
 
 
 def _start_connection_greeting(
@@ -898,6 +920,10 @@ def handle_connection(
             ptype, payload = packet
 
             # Handle protocol packet types
+            if ptype == PTYPE_BUFFER_STATUS:
+                _handle_buffer_status_payload(payload, log)
+                continue
+
             if ptype == PTYPE_PING:
                 send_pong(conn, send_lock)
                 if (
@@ -1070,6 +1096,8 @@ def main():
         memory_dir=memory_dir,
         memory_refresh_interval=memory_refresh_interval,
         emotion_system=shared_emotion_system,
+        response_max_tokens=int(llm_config.get("response_max_tokens", 512) or 512),
+        greeting_max_tokens=int(llm_config.get("greeting_max_tokens", 160) or 160),
     )
 
     log.info(

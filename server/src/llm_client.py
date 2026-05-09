@@ -20,6 +20,7 @@ class LLMClient:
         default_think: ThinkType = False,
         provider: str = "ollama",
         api_key: str = "",
+        retry_max_tokens: int = 1024,
     ):
         self.provider = (provider or "ollama").strip().lower()
         self.api_key = api_key or ""
@@ -27,18 +28,36 @@ class LLMClient:
         self.base_url = resolved_base_url.rstrip("/")
         self.model = model
         self.default_think = default_think
+        self.retry_max_tokens = max(1, int(retry_max_tokens or 1024))
         self.url = f"{self.base_url}/api/chat"
         self.url_generate = f"{self.base_url}/api/generate"
         self.last_error_code = None
         self.last_error = ""
+        self.last_finish_reason = ""
+        self.last_response_truncated = False
 
     def _clear_error_state(self):
         self.last_error_code = None
         self.last_error = ""
+        self.last_finish_reason = ""
+        self.last_response_truncated = False
 
     def _remember_error(self, code: str, message: str):
         self.last_error_code = code
         self.last_error = message
+
+    @staticmethod
+    def _is_length_finish_reason(reason: str | None) -> bool:
+        normalized = (reason or "").strip().lower()
+        return normalized in {"length", "max_tokens", "max_output_tokens", "max_tokens_reached"}
+
+    def _remember_finish_reason(self, reason: str | None):
+        self.last_finish_reason = (reason or "").strip()
+        self.last_response_truncated = self._is_length_finish_reason(self.last_finish_reason)
+
+    def _retry_token_budget(self, max_tokens: int) -> int:
+        retry_tokens = max(int(max_tokens) * 2, 384)
+        return max(int(max_tokens), min(retry_tokens, self.retry_max_tokens))
 
     def chat(
         self,
@@ -64,7 +83,7 @@ class LLMClient:
 
             # 모델이 길이 제한으로 끊긴 경우 한 번 더 크게 재시도
             if content.strip() and done_reason == "length":
-                retry_tokens = min(max(max_tokens * 2, 384), 1024)
+                retry_tokens = self._retry_token_budget(max_tokens)
                 retry_think = False if think else think
                 log.warning(
                     "Ollama response hit token limit (num_predict=%d). retrying once with %d (think=%s).",
@@ -82,11 +101,12 @@ class LLMClient:
                     content = retry_content
                     done_reason = retry_done_reason
                     thinking = retry_thinking
+            self._remember_finish_reason(done_reason)
 
             if not content.strip():
                 if thinking.strip() and think:
                     # thinking은 생성됐지만 최종 content가 비는 경우, think=false로 1회 재시도
-                    retry_tokens = min(max(max_tokens, 384), 1024)
+                    retry_tokens = min(max(max_tokens, 384), self.retry_max_tokens)
                     log.warning(
                         "Ollama returned empty content (thinking_len=%d). retrying once with think=false.",
                         len(thinking),
@@ -98,6 +118,7 @@ class LLMClient:
                         think=False,
                     )
                     if retry_content.strip():
+                        self._remember_finish_reason(retry_done_reason)
                         log.info(
                             "Ollama empty content recovered via think=false (done_reason=%s, len=%d)",
                             retry_done_reason,
@@ -119,11 +140,29 @@ class LLMClient:
     def _chat_external(self, messages: list, temperature: float, max_tokens: int) -> str:
         try:
             if self.provider == "gemini":
-                return self._chat_gemini(messages, temperature, max_tokens)
-            if self.provider == "claude":
-                return self._chat_claude(messages, temperature, max_tokens)
-            if self.provider == "chatgpt":
-                return self._chat_openai(messages, temperature, max_tokens)
+                text = self._chat_gemini(messages, temperature, max_tokens)
+            elif self.provider == "claude":
+                text = self._chat_claude(messages, temperature, max_tokens)
+            elif self.provider == "chatgpt":
+                text = self._chat_openai(messages, temperature, max_tokens)
+
+            if self.provider in {"gemini", "claude", "chatgpt"}:
+                if self.last_response_truncated:
+                    retry_tokens = self._retry_token_budget(max_tokens)
+                    log.warning(
+                        "%s response hit token limit (max_tokens=%d). retrying once with %d.",
+                        self.provider,
+                        max_tokens,
+                        retry_tokens,
+                    )
+                    retry_text = {
+                        "gemini": self._chat_gemini,
+                        "claude": self._chat_claude,
+                        "chatgpt": self._chat_openai,
+                    }[self.provider](messages, temperature, retry_tokens)
+                    if retry_text.strip():
+                        text = retry_text
+                return text
             self._remember_error("unsupported_provider", f"Unsupported LLM provider: {self.provider}")
             log.error("Unsupported LLM provider: %s", self.provider)
         except Exception as exc:
@@ -152,6 +191,7 @@ class LLMClient:
         choices = data.get("choices") or []
         if not choices:
             return ""
+        self._remember_finish_reason(choices[0].get("finish_reason"))
         message = choices[0].get("message") or {}
         return (message.get("content") or "").strip()
 
@@ -184,6 +224,7 @@ class LLMClient:
         )
         response.raise_for_status()
         data = response.json()
+        self._remember_finish_reason(data.get("stop_reason"))
         content = data.get("content") or []
         text_parts = [part.get("text", "") for part in content if isinstance(part, dict)]
         return "".join(text_parts).strip()
@@ -218,6 +259,7 @@ class LLMClient:
             return ""
         candidate = candidates[0]
         finish_reason = (candidate.get("finishReason") or "").upper()
+        self._remember_finish_reason(finish_reason)
         candidate_content = (candidate.get("content") or {}).get("parts") or []
         text = "".join(part.get("text", "") for part in candidate_content if isinstance(part, dict)).strip()
         if text and finish_reason == "MAX_TOKENS":
@@ -336,6 +378,8 @@ class PriorityLLMClient:
         self.default_think = llm_config.get("think", False)
         self.last_error_code = None
         self.last_error = ""
+        self.last_finish_reason = ""
+        self.last_response_truncated = False
         self.provider = (llm_config.get("provider", "ollama") or "ollama").strip().lower()
         self.base_url = llm_config.get("base_url", "http://localhost:11434").rstrip("/")
         self.model = llm_config.get("model", "")
@@ -347,6 +391,7 @@ class PriorityLLMClient:
         self.preferences = preferences
         self.llm_config = dict(llm_config or {})
         self.default_think = self.llm_config.get("think", False)
+        self.retry_max_tokens = int(self.llm_config.get("retry_max_tokens", 1024) or 1024)
         resolved_base_url = (self.llm_config.get("base_url") or "http://localhost:11434").strip()
         self.base_url = resolved_base_url.rstrip("/")
         self.provider = (self.llm_config.get("provider", "ollama") or "ollama").strip().lower()
@@ -378,8 +423,11 @@ class PriorityLLMClient:
                 default_think=self.default_think,
                 provider=provider,
                 api_key=api_key,
+                retry_max_tokens=self.retry_max_tokens,
             )
             self._clients[key] = client
+        else:
+            client.retry_max_tokens = self.retry_max_tokens
         return client
 
     def _build_candidates(self) -> list[dict]:
@@ -504,6 +552,8 @@ class PriorityLLMClient:
                 }
                 self.last_error_code = None
                 self.last_error = ""
+                self.last_finish_reason = getattr(client, "last_finish_reason", "")
+                self.last_response_truncated = bool(getattr(client, "last_response_truncated", False))
                 return response.strip()
 
             errors.append(
@@ -530,4 +580,6 @@ class PriorityLLMClient:
             "api_priority": list(self.preferences.api_priority),
             "base_url": self.base_url,
             "last_error_code": self.last_error_code,
+            "last_finish_reason": self.last_finish_reason,
+            "last_response_truncated": self.last_response_truncated,
         }

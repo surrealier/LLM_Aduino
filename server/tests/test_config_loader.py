@@ -24,6 +24,9 @@ def test_defaults_when_no_yaml_exists(tmp_path):
     assert cfg.get("connection", "serial_baudrate") == 115200
     assert cfg.get("llm", "priority") == ["ollama", "api", "ollama_cpu", "other"]
     assert cfg.get("llm", "api_priority") == ["gemini", "claude", "chatgpt"]
+    assert cfg.get("llm", "response_max_tokens") == 512
+    assert cfg.get("llm", "greeting_max_tokens") == 160
+    assert cfg.get("llm", "retry_max_tokens") == 1024
     assert cfg.get("connection", "priority") == ["wired", "wifi"]
     assert cfg.get("runtime", "processor_priority") == ["gpu", "cpu"]
 
@@ -51,6 +54,16 @@ def test_env_serial_overrides(tmp_path, monkeypatch):
     cfg = Config(config_file=str(tmp_path / "missing.yaml"))
     assert cfg.get("connection", "serial_port") == "/dev/cu.usbserial-test"
     assert cfg.get("connection", "serial_baudrate") == 1500000
+
+
+def test_env_llm_token_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("LLM_RESPONSE_MAX_TOKENS", "640")
+    monkeypatch.setenv("LLM_GREETING_MAX_TOKENS", "192")
+    monkeypatch.setenv("LLM_RETRY_MAX_TOKENS", "1280")
+    cfg = Config(config_file=str(tmp_path / "missing.yaml"))
+    assert cfg.get("llm", "response_max_tokens") == 640
+    assert cfg.get("llm", "greeting_max_tokens") == 192
+    assert cfg.get("llm", "retry_max_tokens") == 1280
 
 
 def test_merge_config_deep():

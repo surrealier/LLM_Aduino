@@ -41,6 +41,16 @@ def _coerce_float(value: Any, default: float) -> float:
         return default
 
 
+def _coerce_int(value: Any, default: int, *, minimum: int | None = None) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        result = default
+    if minimum is not None:
+        result = max(minimum, result)
+    return result
+
+
 def _normalize_string_list(value: Any) -> list[str]:
     if value is None:
         return []
@@ -93,6 +103,9 @@ class Config:
             "auto_start": True,
             "start_command": "ollama serve",
             "startup_timeout": 10.0,
+            "response_max_tokens": 512,
+            "greeting_max_tokens": 160,
+            "retry_max_tokens": 1024,
         },
         "tts": {
             "backend": "edge_tts",
@@ -354,6 +367,15 @@ class Config:
             if "LLM_API_PRIORITY" in os.environ:
                 self.config.setdefault("llm", {})["api_priority"] = os.environ["LLM_API_PRIORITY"]
 
+            if "LLM_RESPONSE_MAX_TOKENS" in os.environ:
+                self.config.setdefault("llm", {})["response_max_tokens"] = int(os.environ["LLM_RESPONSE_MAX_TOKENS"])
+
+            if "LLM_GREETING_MAX_TOKENS" in os.environ:
+                self.config.setdefault("llm", {})["greeting_max_tokens"] = int(os.environ["LLM_GREETING_MAX_TOKENS"])
+
+            if "LLM_RETRY_MAX_TOKENS" in os.environ:
+                self.config.setdefault("llm", {})["retry_max_tokens"] = int(os.environ["LLM_RETRY_MAX_TOKENS"])
+
             if "CONNECTION_PRIORITY" in os.environ:
                 self.config.setdefault("connection", {})["priority"] = os.environ["CONNECTION_PRIORITY"]
 
@@ -384,6 +406,9 @@ class Config:
             ("gemini", "claude", "chatgpt"),
             build_default_api_priority(provider),
         )
+        llm_cfg["response_max_tokens"] = _coerce_int(llm_cfg.get("response_max_tokens"), 512, minimum=1)
+        llm_cfg["greeting_max_tokens"] = _coerce_int(llm_cfg.get("greeting_max_tokens"), 160, minimum=1)
+        llm_cfg["retry_max_tokens"] = _coerce_int(llm_cfg.get("retry_max_tokens"), 1024, minimum=1)
 
         tts_cfg = self.config.setdefault("tts", {})
         tts_cfg["backend"] = (tts_cfg.get("backend") or "edge_tts").strip().lower()
@@ -396,9 +421,10 @@ class Config:
         if controller not in {"legacy_direct", "companion_uart"}:
             controller = "legacy_direct"
         robot_cfg["controller"] = controller
-        robot_cfg["transport"] = str(
-            robot_cfg.get("transport", "companion" if controller == "companion_uart" else "local") or ""
-        ).strip().lower() or ("companion" if controller == "companion_uart" else "local")
+        transport = str(robot_cfg.get("transport") or "").strip().lower()
+        if controller == "companion_uart" and transport == "local":
+            transport = "companion"
+        robot_cfg["transport"] = transport or ("companion" if controller == "companion_uart" else "local")
 
         companion_cfg = robot_cfg.setdefault("companion", {})
         companion_cfg["transport"] = "uart"

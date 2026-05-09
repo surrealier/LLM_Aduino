@@ -118,6 +118,42 @@ def test_encode_serial_audio_payload_downsamples_to_wired_codec():
     assert restored[3] > 1000
 
 
+def test_encode_serial_audio_payload_attenuates_high_frequency_aliasing():
+    sr = 16000
+    t = np.arange(sr // 2, dtype=np.float32) / sr
+    low = (0.8 * np.sin(2 * np.pi * 1000 * t) * 32767).astype("<i2")
+    high = (0.8 * np.sin(2 * np.pi * 6500 * t) * 32767).astype("<i2")
+
+    def _roundtrip_rms(samples):
+        encoded = protocol._encode_serial_audio_payload(samples.tobytes())
+        decoded = np.frombuffer(protocol._decode_serial_audio_payload(encoded), dtype=np.int16).astype(np.float32)
+        return float(np.sqrt(np.mean(decoded * decoded)))
+
+    assert _roundtrip_rms(high) < _roundtrip_rms(low) * 0.18
+
+
+def test_buffer_status_payload_is_valid_incoming_packet_type():
+    payload = b'{"event":"playback_end"}'
+    packet = struct.pack("<BH", protocol.PTYPE_BUFFER_STATUS, len(payload)) + payload
+
+    class _FakeConn:
+        def __init__(self, data: bytes):
+            self._data = bytearray(data)
+
+        def recv(self, n: int) -> bytes:
+            if not self._data:
+                return b""
+            take = min(n, len(self._data))
+            chunk = bytes(self._data[:take])
+            del self._data[:take]
+            return chunk
+
+    assert protocol.recv_packet(_FakeConn(packet), header_timeouts=1, payload_timeouts=1) == (
+        protocol.PTYPE_BUFFER_STATUS,
+        payload,
+    )
+
+
 def test_recv_packet_decodes_serial_audio_payload_back_to_pcm16():
     class _FakeSerialConn:
         def __init__(self, data: bytes):

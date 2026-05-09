@@ -19,6 +19,7 @@
 
 #include <M5Unified.h>
 #include <WiFi.h>
+#include <Wire.h>
 #include <math.h>
 #include "config.h"
 #include "audio_buffer.h"
@@ -74,10 +75,10 @@ static bool speaker_reinit() {
   M5.Speaker.stop();
   M5.Speaker.end();
   auto spk_cfg = M5.Speaker.config();
-  spk_cfg.sample_rate = connection_is_wired_mode() ? WIRED_TTS_SAMPLE_RATE : AUDIO_SAMPLE_RATE;
+  spk_cfg.sample_rate = AUDIO_SAMPLE_RATE;
   M5.Speaker.config(spk_cfg);
   bool ok = M5.Speaker.begin();
-  M5.Speaker.setVolume(180);
+  M5.Speaker.setVolume(SPEAKER_TTS_VOLUME);
   if (!ok) {
     DEBUG_PRINTLN("[AUDIO] Speaker begin failed");
   }
@@ -227,7 +228,7 @@ void loop() {
     }
   }
 
-  protocol_audio_process();               // Ring buffer -> speaker playback processing
+  protocol_audio_process(transport);       // Ring buffer -> speaker playback processing
 
   bool is_playing = protocol_is_audio_playing();
   bool has_buffered_audio = protocol_has_audio_buffered();

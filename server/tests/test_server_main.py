@@ -495,6 +495,25 @@ def test_start_connection_greeting_spawns_background_thread():
     assert kwargs["name"] == "connection-greeting"
 
 
+def test_handle_buffer_status_payload_logs_event():
+    fake_logger = mock.Mock()
+
+    status = srv._handle_buffer_status_payload(
+        b'{"event":"ring_drop","used":1200,"dropped":512}',
+        fake_logger,
+    )
+
+    assert status == {"event": "ring_drop", "used": 1200, "dropped": 512}
+    fake_logger.warning.assert_called_once()
+
+
+def test_handle_buffer_status_payload_rejects_invalid_json():
+    fake_logger = mock.Mock()
+
+    assert srv._handle_buffer_status_payload(b"{bad", fake_logger) is None
+    fake_logger.warning.assert_called_once()
+
+
 def test_build_interrupt_handler_prints_stats_and_raises():
     perf = mock.Mock()
     handler = srv._build_interrupt_handler(perf)

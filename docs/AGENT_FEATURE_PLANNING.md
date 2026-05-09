@@ -76,6 +76,16 @@
   - `pytest server/tests/test_cli_integration.py -k config`
   - `pytest server/tests/test_connection.py`
 
+### EPIC-D2: 유선 USB LLM/TTS 출력 안정화 (PRD 5.1.1)
+- [x] (SA-2/SA-3, DONE) Gemini/OpenAI/Claude/Ollama 길이 제한 응답을 감지해 1회 재시도하고, 연결 인사 재시도 실패 시 fallback 문구를 사용
+- [x] (SA-3, DONE) `llm.response_max_tokens`, `llm.greeting_max_tokens`, `llm.retry_max_tokens` 설정과 환경 변수 override 추가
+- [x] (SA-2, DONE) wired TTS 인코더의 anti-alias low-pass와 mu-law round-trip 회귀 테스트 추가
+- [x] (SA-8, DONE) Atom Echo 펌웨어에서 wired TTS를 `16kHz PCM`으로 확장 재생하고 `SPEAKER_TTS_VOLUME` 기본값 적용
+- [x] (SA-2/SA-8, DONE) `BUFFER_STATUS` telemetry를 protocol/server 로그 경로에 연결
+- 검증:
+  - `pytest server/tests/test_llm_client.py server/tests/test_agent_mode.py server/tests/test_protocol.py server/tests/test_server_main.py server/tests/test_config_loader.py`
+  - `docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from server-test`
+
 ### EPIC-E: Integration 품질 고도화 (PRD 5.2)
 - [x] (SA-4, DONE) 연동 공통 인터페이스(타임아웃/재시도/오류코드) 표준화
 - [x] (SA-4, DONE) Weather/Search/Calendar/Notify/Maps 헬스체크 일관화

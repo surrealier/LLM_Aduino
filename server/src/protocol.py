@@ -74,31 +74,32 @@ def _encode_serial_audio_payload(pcm_bytes: bytes) -> bytes:
     Transcode PCM16LE/16kHz mono to G.711 mu-law/8kHz mono for wired USB links.
 
     This halves the sample rate and compresses each sample to 8-bit so 115200
-    baud can carry wired audio without starving microphone capture. A two-tap
-    averaging filter reduces aliasing before the 2:1 decimation, and a single-
-    pole IIR smooths the result to cut wired-only high-frequency hiss.
+    baud can carry wired audio without starving microphone capture. A compact
+    FIR low-pass reduces aliasing before the 2:1 decimation.
     """
     usable = len(pcm_bytes) - (len(pcm_bytes) % 2)
     if usable <= 0:
         return b""
 
-    # Read all samples first for proper filtering
+    # Read all samples first for proper filtering.
     n_samples = usable // 2
     samples = []
     for i in range(0, usable, 2):
         samples.append(int.from_bytes(pcm_bytes[i : i + 2], "little", signed=True))
 
-    # 2:1 decimation with averaging + IIR smoothing (alpha=0.35)
+    # 2:1 decimation with a compact anti-alias FIR.
+    # The [1, 3, 3, 1] kernel strongly attenuates energy above the 4kHz
+    # Nyquist limit of the wired 8kHz stream while preserving speech-band tone.
     out_len = n_samples // 2
     encoded = bytearray(out_len)
-    prev = 0
     for i in range(out_len):
         idx = i * 2
-        avg = (samples[idx] + samples[idx + 1]) // 2
-        # Single-pole low-pass: y[n] = alpha*x[n] + (1-alpha)*y[n-1]
-        filtered = (avg * 9 + prev * 7) >> 4  # alpha ≈ 0.56
+        xm1 = samples[idx - 1] if idx > 0 else samples[idx]
+        x0 = samples[idx]
+        x1 = samples[idx + 1] if idx + 1 < n_samples else samples[-1]
+        x2 = samples[idx + 2] if idx + 2 < n_samples else samples[-1]
+        filtered = (xm1 + (3 * x0) + (3 * x1) + x2) // 8
         encoded[i] = _linear16_to_mulaw(filtered)
-        prev = filtered
     return bytes(encoded)
 
 

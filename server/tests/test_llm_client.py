@@ -181,6 +181,92 @@ def test_gemini_provider_calls_google_api(monkeypatch):
     assert "generativelanguage.googleapis.com" in captured["url"]
 
 
+def test_gemini_retries_when_finish_reason_is_max_tokens(monkeypatch):
+    captured = []
+
+    def fake_post(url, json=None, timeout=None):
+        captured.append(json["generationConfig"]["maxOutputTokens"])
+        if len(captured) == 1:
+            return _JsonResponse(
+                {
+                    "candidates": [
+                        {
+                            "finishReason": "MAX_TOKENS",
+                            "content": {"parts": [{"text": "잘린 응답"}]},
+                        }
+                    ]
+                }
+            )
+        return _JsonResponse(
+            {
+                "candidates": [
+                    {
+                        "finishReason": "STOP",
+                        "content": {"parts": [{"text": "완성된 응답"}]},
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("src.llm_client.requests.post", fake_post)
+    client = LLMClient("", "gemini-1.5-flash", provider="gemini", api_key="gem-key")
+
+    result = client.chat([{"role": "user", "content": "안녕"}], temperature=0.4, max_tokens=80)
+
+    assert result == "완성된 응답"
+    assert captured == [80, 384]
+    assert client.last_response_truncated is False
+
+
+def test_gemini_keeps_truncated_flag_when_retry_still_hits_max_tokens(monkeypatch):
+    calls = 0
+
+    def fake_post(url, json=None, timeout=None):
+        nonlocal calls
+        calls += 1
+        return _JsonResponse(
+            {
+                "candidates": [
+                    {
+                        "finishReason": "MAX_TOKENS",
+                        "content": {"parts": [{"text": f"잘린 응답 {calls}"}]},
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("src.llm_client.requests.post", fake_post)
+    client = LLMClient("", "gemini-1.5-flash", provider="gemini", api_key="gem-key")
+
+    result = client.chat([{"role": "user", "content": "안녕"}], temperature=0.4, max_tokens=80)
+
+    assert result == "잘린 응답 2"
+    assert calls == 2
+    assert client.last_response_truncated is True
+
+
+def test_openai_provider_retries_when_finish_reason_is_length(monkeypatch):
+    captured = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured.append(json["max_tokens"])
+        if len(captured) == 1:
+            return _JsonResponse(
+                {"choices": [{"finish_reason": "length", "message": {"content": "partial"}}]}
+            )
+        return _JsonResponse(
+            {"choices": [{"finish_reason": "stop", "message": {"content": "complete"}}]}
+        )
+
+    monkeypatch.setattr("src.llm_client.requests.post", fake_post)
+    client = LLMClient("", "gpt-4o-mini", provider="chatgpt", api_key="sk-test")
+
+    result = client.chat([{"role": "user", "content": "hello"}], temperature=0.3, max_tokens=64)
+
+    assert result == "complete"
+    assert captured == [64, 384]
+
+
 def test_claude_provider_calls_anthropic_api(monkeypatch):
     captured = {}
 
@@ -198,3 +284,21 @@ def test_claude_provider_calls_anthropic_api(monkeypatch):
     assert result == "Claude 응답"
     assert captured["url"] == "https://api.anthropic.com/v1/messages"
     assert captured["headers"]["x-api-key"] == "ant-key"
+
+
+def test_claude_provider_retries_when_stop_reason_is_max_tokens(monkeypatch):
+    captured = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured.append(json["max_tokens"])
+        if len(captured) == 1:
+            return _JsonResponse({"stop_reason": "max_tokens", "content": [{"text": "partial"}]})
+        return _JsonResponse({"stop_reason": "end_turn", "content": [{"text": "complete"}]})
+
+    monkeypatch.setattr("src.llm_client.requests.post", fake_post)
+    client = LLMClient("", "claude-3-5-haiku-latest", provider="claude", api_key="ant-key")
+
+    result = client.chat([{"role": "user", "content": "안녕"}], temperature=0.2, max_tokens=90)
+
+    assert result == "complete"
+    assert captured == [90, 384]

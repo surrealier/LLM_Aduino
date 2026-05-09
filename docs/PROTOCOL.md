@@ -21,7 +21,7 @@ Every packet uses:
 - `0x10` `PING`
   - Keepalive heartbeat
 - `0x13` `BUFFER_STATUS` (optional)
-  - ESP32 buffer telemetry (if enabled)
+  - ESP32 buffer/playback telemetry (if enabled)
 
 ### Server -> ESP32
 
@@ -44,6 +44,7 @@ Every packet uses:
   - Encoding: G.711 mu-law
   - Channel: mono
   - Sample rate: 8kHz
+  - Server-to-device TTS is transported as `8kHz mu-law`, then the firmware may expand it to `16kHz PCM` for speaker playback to reduce playback artifacts without increasing serial bandwidth.
 
 ## Command Payload (`0x11`)
 
@@ -59,6 +60,28 @@ Server sends JSON, for example:
 ```
 
 Startup control messages may also use the same `CMD` channel, for example `{"action":"MIC_LOCK"}` and `{"action":"MIC_UNLOCK"}`.
+
+## Buffer Status Payload (`0x13`)
+
+Firmware may report playback health as compact JSON, for example:
+
+```json
+{
+  "event": "ring_drop",
+  "used": 1200,
+  "available": 4096,
+  "dropped": 512
+}
+```
+
+Known `event` values:
+- `playback_start`
+- `playback_end`
+- `ring_drop`
+- `ring_push_failed`
+- `playraw_fail`
+
+These packets must use protocol framing. In wired mode, firmware debug `Serial.print` output must remain disabled so text logs do not corrupt the binary stream.
 
 ## Connection Notes
 

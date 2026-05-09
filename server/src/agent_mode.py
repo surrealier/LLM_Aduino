@@ -78,9 +78,13 @@ class AgentMode:
         memory_dir=None,
         memory_refresh_interval=5,
         emotion_system=None,
+        response_max_tokens: int = 512,
+        greeting_max_tokens: int = 160,
     ):
         self.llm = llm_client
         self.tts_voice = tts_voice or "ko-KR-SunHiNeural"
+        self.response_max_tokens = max(1, int(response_max_tokens or 512))
+        self.greeting_max_tokens = max(1, int(greeting_max_tokens or 160))
 
         # 대화 기록
         self.conversation_history = []
@@ -372,9 +376,12 @@ class AgentMode:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.6,
-                max_tokens=80,
+                max_tokens=getattr(self, "greeting_max_tokens", 160),
                 think=False,
             )
+            if bool(getattr(self.llm, "last_response_truncated", False)):
+                log.warning("Connection greeting LLM response was truncated; using fallback greeting.")
+                return fallback
             return self._normalize_connection_greeting(raw, now=now)
         except Exception as exc:
             log.warning("Connection greeting generation failed: %s", exc)
@@ -401,6 +408,21 @@ class AgentMode:
 
         return ""
 
+    def _set_emotion_body_state(self) -> None:
+        setter = getattr(self.emotion_system, "set_body_state", None)
+        if not callable(setter):
+            return
+        setter(sleep_mode=self.proactive.sleep_mode)
+
+    def _analyze_turn_emotion(self, text: str, speaker_id: str | None = None) -> str:
+        analyzer = getattr(self.emotion_system, "analyze_emotion", None)
+        if not callable(analyzer):
+            return "neutral"
+        try:
+            return analyzer(text, speaker_id=speaker_id or "default")
+        except TypeError:
+            return analyzer(text)
+
     def generate_response(self, text: str, is_proactive: bool = False, speaker_id: str | None = None) -> tuple[str, str]:
         """응답 생성. Returns (response_text, intent)."""
         if not self.llm:
@@ -425,8 +447,8 @@ class AgentMode:
                 if schedule_response:
                     info_context = schedule_response if isinstance(schedule_response, str) else str(schedule_response)
 
-            self.emotion_system.set_body_state(sleep_mode=self.proactive.sleep_mode)
-            detected_emotion = self.emotion_system.analyze_emotion(text, speaker_id=speaker_id or "default")
+            self._set_emotion_body_state()
+            detected_emotion = self._analyze_turn_emotion(text, speaker_id=speaker_id)
 
             history = self._history_for_user(speaker_id)
 
@@ -447,7 +469,11 @@ class AgentMode:
             for conv in history[-self.max_history:]:
                 messages.append({"role": conv["role"], "content": conv["content"]})
 
-            raw = self.llm.chat(messages, temperature=0.8, max_tokens=256)
+            raw = self.llm.chat(
+                messages,
+                temperature=0.8,
+                max_tokens=getattr(self, "response_max_tokens", 512),
+            )
             if raw.strip():
                 intent, clean_text = parse_intent(raw)
                 response = self._sanitize_response(clean_text)
@@ -464,7 +490,7 @@ class AgentMode:
                 self.proactive.sleep_until = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
                 self.emotion_system.set_body_state(sleep_mode=True, fatigue=1.0)
 
-            response_emotion = self.emotion_system.analyze_emotion(response, speaker_id=speaker_id or "default")
+            response_emotion = self._analyze_turn_emotion(response, speaker_id=speaker_id)
             history.append(
                 {
                     "role": "assistant",

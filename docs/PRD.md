@@ -73,6 +73,7 @@
 - 외부 API 연동 확장 시 통합 품질 게이트가 더 강화되어야 함
 - ESP32 통신 회귀 테스트의 자동화 수준을 지속 확장 필요
 - 문서상 계획(Planning)과 제품 요구사항(PRD)의 경계가 혼재될 수 있음
+- 유선 USB TTS는 `115200 baud`를 유지하기 위해 `8kHz G.711 mu-law` 전송을 사용하므로, LLM 응답 잘림 방지와 펌웨어 재생 품질 보정이 핵심 안정성 요구사항이다.
 
 ---
 
@@ -91,6 +92,12 @@
 - 웹 UI는 제목/본문 계층을 분리하고, 긴 문장은 본문/메타 슬롯으로 내려 다국어에서도 레이아웃이 무너지지 않도록 유지해야 한다
 - 웹 대시보드는 STT/LLM/연결/Integration 상태를 진단하고 일부 안전한 설정만 수정할 수 있는 diagnostics-first UX를 제공해야 한다
 - 웹 대시보드 브랜딩은 메인 화면의 브로콜리 마스코트 중심으로 단순화하고, 나머지 화면은 데이터 중심으로 구성해야 한다
+
+## 5.1.1 유선 USB LLM/TTS 안정화 요구사항
+- LLM provider가 길이 제한으로 응답을 종료하면, 서버는 provider 공통 재시도 정책을 적용하고 잘린 연결 인사를 TTS로 송출하지 않아야 한다.
+- `llm.response_max_tokens`, `llm.greeting_max_tokens`, `llm.retry_max_tokens`는 설정 파일과 환경 변수에서 조정 가능해야 한다.
+- 유선 USB TTS는 wire format을 `8kHz mu-law`로 유지하되, 서버 인코딩 단계에서 고주파 aliasing을 억제하고 펌웨어 재생 단계에서 `16kHz PCM`으로 확장할 수 있어야 한다.
+- 펌웨어는 ring buffer drop, `playRaw` 실패, playback start/end를 `BUFFER_STATUS` 패킷으로 보고해 서버 로그에서 재생 품질 문제를 추적할 수 있어야 한다.
 
 ## 5.2 기능 트랙 B — 통합(Integration) 확장
 - Weather / Search / Calendar / Notify / Maps 기능 고도화

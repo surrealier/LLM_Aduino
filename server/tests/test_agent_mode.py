@@ -103,6 +103,28 @@ def test_generate_connection_greeting_uses_llm_context_and_prefix():
 
     assert greeting == "콜리 연결됐어요! 아직 일하고 계세요?"
     assert "실시간 최근 대화" in agent.llm.messages[1]["content"]
+    assert agent.llm.messages
+
+
+def test_generate_connection_greeting_falls_back_when_llm_truncates():
+    class _FakeMemory:
+        def build_system_prompt(self):
+            return "기억된 메모"
+
+    class _FakeLLM:
+        last_response_truncated = False
+
+        def chat(self, messages, **kwargs):
+            self.last_response_truncated = True
+            return "연결"
+
+    agent = _make_agent()
+    agent.memory = _FakeMemory()
+    agent.llm = _FakeLLM()
+
+    greeting = agent.generate_connection_greeting(now=datetime(2026, 3, 17, 8, 0))
+
+    assert greeting == "콜리 연결됐어요! 잠 잘 주무셨어요?"
 
 
 def test_generate_connection_greeting_falls_back_by_time():

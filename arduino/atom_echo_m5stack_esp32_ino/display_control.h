@@ -1,6 +1,8 @@
 #ifndef DISPLAY_CONTROL_H
 #define DISPLAY_CONTROL_H
 
+#include <stdint.h>
+
 enum FaceType {
   FACE_NEUTRAL,
   FACE_HAPPY,

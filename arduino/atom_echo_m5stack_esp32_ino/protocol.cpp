@@ -59,12 +59,35 @@ static size_t audio_ring_size = AUDIO_PLAY_BUFFER_SIZE;
 static bool audio_playing = false;
 static bool capture_locked = false;
 static bool capture_lock_waiting_for_playback = false;
+static bool audio_ring_drop_pending = false;
+static size_t audio_ring_last_drop_bytes = 0;
+static int16_t wired_upsample_previous_sample = 0;
+static bool wired_upsample_has_previous_sample = false;
 
 // PING 타이밍
 static uint32_t last_ping_ms = 0;
 static uint32_t last_peer_rx_ms = 0;
 
 #define DEBUG_PRINTLN(msg) do { if (connection_debug_logging_enabled()) Serial.println(msg); } while (0)
+
+static size_t audio_ring_available();
+static size_t audio_ring_used();
+
+static bool send_buffer_status(Stream& transport, const char* event, size_t dropped = 0) {
+  char payload[128];
+  int n = snprintf(
+      payload,
+      sizeof(payload),
+      "{\"event\":\"%s\",\"used\":%u,\"available\":%u,\"dropped\":%u}",
+      event,
+      (unsigned)audio_ring_used(),
+      (unsigned)audio_ring_available(),
+      (unsigned)dropped);
+  if (n <= 0) return false;
+  size_t len = (size_t)n;
+  if (len >= sizeof(payload)) len = sizeof(payload) - 1;
+  return protocol_send_packet(transport, PTYPE_BUFFER_STATUS, (const uint8_t*)payload, (uint16_t)len);
+}
 
 static inline bool wired_tts_mode() {
   return connection_is_wired_mode();
@@ -246,6 +269,8 @@ static bool audio_ring_push(const uint8_t* data, size_t len) {
     }
     if (to_drop > used) to_drop = used;
     audio_ring_tail = (audio_ring_tail + to_drop) % audio_ring_size;
+    audio_ring_drop_pending = true;
+    audio_ring_last_drop_bytes = to_drop;
     if (audio_ring_available() < len) return false;
   }
   // memcpy with wrap-around (버퍼 끝을 넘어가면 두 번에 나눠 복사)
@@ -284,7 +309,7 @@ static size_t audio_ring_pop(uint8_t* data, size_t max_len) {
 // handleAudioOut — AUDIO_OUT(0x12) 패킷 처리
 // 서버에서 스트리밍되는 TTS 오디오를 링 버퍼에 저장.
 // 1KB 이상 축적되면 재생 시작 (짧은 응답 지연 최소화)
-static void handleAudioOut(const uint8_t* payload, uint16_t len) {
+static void handleAudioOut(Stream& transport, const uint8_t* payload, uint16_t len) {
   if (!wired_tts_mode()) {
     // 16-bit PCM alignment (1 sample = 2 bytes)
     if (len & 0x01) len -= 1;
@@ -293,11 +318,23 @@ static void handleAudioOut(const uint8_t* payload, uint16_t len) {
     return;
   }
 
-  if (!audio_ring_push(payload, len)) return;
+  if (!audio_ring_push(payload, len)) {
+    send_buffer_status(transport, "ring_push_failed", len);
+    return;
+  }
+
+  if (audio_ring_drop_pending) {
+    send_buffer_status(transport, "ring_drop", audio_ring_last_drop_bytes);
+    audio_ring_drop_pending = false;
+    audio_ring_last_drop_bytes = 0;
+  }
 
   if (!audio_playing && audio_ring_used() >= audio_output_start_threshold_bytes()) {
     audio_playing = true;
-    M5.Speaker.setVolume(180);
+    wired_upsample_previous_sample = 0;
+    wired_upsample_has_previous_sample = false;
+    M5.Speaker.setVolume(SPEAKER_TTS_VOLUME);
+    send_buffer_status(transport, "playback_start");
   }
 }
 
@@ -507,18 +544,21 @@ bool protocol_send_packet(Stream& transport, uint8_t type, const uint8_t* payloa
 // 페이로드 단계에서는 벌크 읽기(client.read(buf, n))로 성능 최적화
 void protocol_poll(Stream& transport) {
   while (transport.available() > 0) {
-    // ── 벌크 읽기: 대형 오디오 패킷 (AUDIO_OUT, >2KB) ──
-    if (rx_stage == RX_PAYLOAD && rx_type == PTYPE_AUDIO_OUT && rx_len > RX_MAX_PAYLOAD) {
-      if (rx_audio_buf && rx_pos < rx_len) {
+    // ── 벌크 읽기: 오디오 패킷 (AUDIO_OUT, 모든 크기) ──
+    if (rx_stage == RX_PAYLOAD && rx_type == PTYPE_AUDIO_OUT) {
+      uint8_t* target = (rx_len > RX_MAX_PAYLOAD) ? rx_audio_buf : rx_buf;
+      size_t target_size = (rx_len > RX_MAX_PAYLOAD) ? rx_audio_buf_size : RX_MAX_PAYLOAD;
+      if (target && rx_pos < rx_len && rx_pos < target_size) {
         size_t want = rx_len - rx_pos;
+        if (want > target_size - rx_pos) want = target_size - rx_pos;
         int avail = transport.available();
         if ((size_t)avail < want) want = avail;
-        size_t got = transport.readBytes((char*)(rx_audio_buf + rx_pos), want);
+        size_t got = transport.readBytes((char*)(target + rx_pos), want);
         if (got == 0) break;
         rx_pos += got;
         if (rx_pos >= rx_len) {
           last_peer_rx_ms = millis();
-          handleAudioOut(rx_audio_buf, rx_len);
+          handleAudioOut(transport, target, rx_len);
           rx_stage = RX_TYPE;
         }
         continue;
@@ -576,7 +616,11 @@ void protocol_poll(Stream& transport) {
           rx_stage = RX_PAYLOAD;
           // 대형 오디오 패킷: 동적 버퍼 할당 (상한 RX_AUDIO_MAX_ALLOC)
           if (rx_type == PTYPE_AUDIO_OUT && rx_len > RX_MAX_PAYLOAD) {
-            size_t alloc_sz = (rx_len > RX_AUDIO_MAX_ALLOC) ? RX_AUDIO_MAX_ALLOC : rx_len;
+            if (rx_len > RX_AUDIO_MAX_ALLOC) {
+              rx_stage = RX_TYPE;  // 비정상 대형 패킷 스킵
+              break;
+            }
+            size_t alloc_sz = rx_len;
             if (!rx_audio_buf || rx_audio_buf_size < alloc_sz) {
               if (rx_audio_buf) free(rx_audio_buf);
               rx_audio_buf = (uint8_t*)malloc(alloc_sz);
@@ -604,8 +648,8 @@ void protocol_poll(Stream& transport) {
           last_peer_rx_ms = millis();
           if (rx_type == PTYPE_CMD) handleCmdJson(rx_buf, rx_len);
           else if (rx_type == PTYPE_AUDIO_OUT) {
-            if (rx_len > RX_MAX_PAYLOAD) handleAudioOut(rx_audio_buf, rx_len);
-            else handleAudioOut(rx_buf, rx_len);
+            if (rx_len > RX_MAX_PAYLOAD) handleAudioOut(transport, rx_audio_buf, rx_len);
+            else handleAudioOut(transport, rx_buf, rx_len);
           }
           rx_stage = RX_TYPE;
         }
@@ -627,7 +671,7 @@ void protocol_send_ping_if_needed(Stream& transport, uint32_t interval_ms) {
 // protocol_audio_process — 링 버퍼에서 스피커로 오디오 공급
 // 스피커가 idle일 때만 다음 청크를 넘겨 중복 재생/노이즈를 방지한다.
 // playRaw() 실패(큐 가득 참) 시 읽은 데이터를 롤백하여 다음 사이클에 재시도한다.
-void protocol_audio_process() {
+void protocol_audio_process(Stream& transport) {
   if (!audio_playing) return;
 
   size_t used_now = audio_ring_used();
@@ -645,13 +689,20 @@ void protocol_audio_process() {
 
     if (wired_tts_mode()) {
       static uint8_t play_buffer_u8[1024];
-      static int16_t play_buffer_i16[1024];
+      static int16_t play_buffer_i16[2048];
       chunk_size = audio_ring_pop(play_buffer_u8, sizeof(play_buffer_u8));
       for (size_t i = 0; i < chunk_size; ++i) {
-        play_buffer_i16[i] = mulaw_to_linear16(play_buffer_u8[i]);
+        int16_t sample = mulaw_to_linear16(play_buffer_u8[i]);
+        int32_t mid = wired_upsample_has_previous_sample
+            ? (((int32_t)wired_upsample_previous_sample + (int32_t)sample) / 2)
+            : sample;
+        play_buffer_i16[i * 2] = (int16_t)mid;
+        play_buffer_i16[i * 2 + 1] = sample;
+        wired_upsample_previous_sample = sample;
+        wired_upsample_has_previous_sample = true;
       }
       if (chunk_size >= 1) {
-        queued = M5.Speaker.playRaw(play_buffer_i16, chunk_size, audio_output_sample_rate(), false, 1, 0);
+        queued = M5.Speaker.playRaw(play_buffer_i16, chunk_size * 2, AUDIO_SAMPLE_RATE, false, 1, 0);
       }
     } else {
       static uint8_t play_buffer[2048];
@@ -669,6 +720,7 @@ void protocol_audio_process() {
         uint32_t now = millis();
         if (now - last_playraw_fail_ms >= 500) {
           DEBUG_PRINTLN("[AUDIO_PROC] playRaw queue full; retry next cycle");
+          send_buffer_status(transport, "playraw_fail", chunk_size);
           last_playraw_fail_ms = now;
         }
       }
@@ -678,6 +730,9 @@ void protocol_audio_process() {
   // 버퍼 소진 + 재생 완료 → 재생 종료
   if (audio_ring_used() == 0 && !M5.Speaker.isPlaying()) {
     audio_playing = false;
+    wired_upsample_previous_sample = 0;
+    wired_upsample_has_previous_sample = false;
+    send_buffer_status(transport, "playback_end");
     if (capture_locked && capture_lock_waiting_for_playback) {
       capture_locked = false;
       capture_lock_waiting_for_playback = false;
@@ -701,6 +756,8 @@ void protocol_clear_audio_buffer() {
   audio_ring_head = 0;
   audio_ring_tail = 0;
   audio_playing = false;
+  wired_upsample_previous_sample = 0;
+  wired_upsample_has_previous_sample = false;
   capture_locked = false;
   capture_lock_waiting_for_playback = false;
   M5.Speaker.stop();
