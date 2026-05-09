@@ -363,10 +363,14 @@ class PriorityLLMClient:
         self.base_url = llm_config.get("base_url", "http://localhost:11434").rstrip("/")
         self.model = llm_config.get("model", "")
         self.active_candidate = None
+        self._active_candidate_config = None
         self._clients: dict[tuple[str, str, str], LLMClient] = {}
         self.reload_runtime_preferences(preferences, llm_config)
 
     def reload_runtime_preferences(self, preferences: RuntimePreferences, llm_config: dict):
+        self.active_candidate = None
+        self._active_candidate_config = None
+        self._clients = {}
         self.preferences = preferences
         self.llm_config = dict(llm_config or {})
         self.default_think = self.llm_config.get("think", False)
@@ -489,6 +493,50 @@ class PriorityLLMClient:
             deduped.append(candidate)
         return deduped
 
+    def _set_active_candidate(self, candidate: dict, client: LLMClient):
+        self.provider = client.provider
+        self.model = client.model
+        self.base_url = client.base_url
+        self._active_candidate_config = dict(candidate)
+        self.active_candidate = {
+            "bucket": candidate["bucket"],
+            "provider": client.provider,
+            "model": client.model,
+            "processor": candidate["processor"],
+        }
+
+    def _chat_candidate(
+        self,
+        candidate: dict,
+        messages: list,
+        temperature: float,
+        max_tokens: int,
+        think: ThinkType,
+    ) -> str:
+        client = self._client_for_candidate(
+            candidate["provider"],
+            candidate["model"],
+            candidate["api_key"],
+        )
+        response = client.chat(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            think=think,
+        )
+        if response.strip():
+            self._set_active_candidate(candidate, client)
+            self.last_error_code = None
+            self.last_error = ""
+            return response.strip()
+
+        if client.last_error_code:
+            self.last_error_code = client.last_error_code
+            self.last_error = client.last_error
+        else:
+            self._remember_error("provider_error", f"{candidate['provider']} returned empty response")
+        return ""
+
     def chat(
         self,
         messages: list,
@@ -497,6 +545,15 @@ class PriorityLLMClient:
         think: ThinkType = None,
     ) -> str:
         self._clear_error_state()
+        if self._active_candidate_config is not None:
+            return self._chat_candidate(
+                self._active_candidate_config,
+                messages,
+                temperature,
+                max_tokens,
+                think,
+            )
+
         candidates = self._build_candidates()
         if not candidates:
             self._remember_error("unsupported_provider", "No runnable LLM candidate is configured")
@@ -504,39 +561,13 @@ class PriorityLLMClient:
 
         errors = []
         for candidate in candidates:
-            client = self._client_for_candidate(
-                candidate["provider"],
-                candidate["model"],
-                candidate["api_key"],
-            )
-            response = client.chat(
-                messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                think=think,
-            )
+            response = self._chat_candidate(candidate, messages, temperature, max_tokens, think)
             if response.strip():
-                self.provider = client.provider
-                self.model = client.model
-                self.base_url = client.base_url
-                self.active_candidate = {
-                    "bucket": candidate["bucket"],
-                    "provider": client.provider,
-                    "model": client.model,
-                    "processor": candidate["processor"],
-                }
-                self.last_error_code = None
-                self.last_error = ""
                 return response.strip()
 
             errors.append(
-                f"{candidate['bucket']}:{candidate['provider']}({client.last_error_code or 'empty'})"
+                f"{candidate['bucket']}:{candidate['provider']}({self.last_error_code or 'empty'})"
             )
-            if client.last_error_code:
-                self.last_error_code = client.last_error_code
-                self.last_error = client.last_error
-            else:
-                self._remember_error("provider_error", f"{candidate['provider']} returned empty response")
 
         if errors and not self.last_error:
             self._remember_error("provider_error", ", ".join(errors))

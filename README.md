@@ -187,7 +187,7 @@ flowchart LR
 
 - 🗣️ **Voice-first** — speak naturally, get voice responses
 - 🧠 **Multi-LLM** — Ollama (local, default), Gemini, Claude, ChatGPT
-- 🧭 **Runtime priority routing** — checks model, network, and processor candidates in order and only falls back after a higher-priority path is confirmed unavailable
+- 🧭 **Runtime priority routing** — resolves model, network, and processor candidates in priority order, then keeps the selected LLM route until config or priority is reloaded
 - 🔌 **Integrations** — weather, calendar, search, maps, notifications
 - 🎙️ **Voice ID** — speaker recognition to personalize responses
 - 🤖 **Robot mode** *(coming soon)* — servo/display control via voice
@@ -313,6 +313,8 @@ api 우선순위 gemini > claude > chatgpt
 ```
 
 When `connection.mode` is `auto`, the server keeps checking both `Wired` and `WiFi` live and binds to the first healthy link that appears while still honoring the current priority order.
+
+LLM priority is resolved on the first LLM request after startup or priority/config reload. If a higher-priority route such as local Ollama is unavailable and Gemini succeeds, later turns go directly to Gemini instead of rechecking Ollama on every message.
 
 `ollama_cpu` is a distinct fallback bucket in runtime policy, but a single shared Ollama server cannot be forced to switch GPU/CPU per request. To make that bucket physically separate, point it at a dedicated CPU-only local Ollama instance.
 

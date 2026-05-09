@@ -88,3 +88,54 @@ def test_priority_llm_client_falls_back_to_api_before_cpu_ollama(monkeypatch):
     assert response == "api response"
     assert calls[0] == ("gemini", "gemini-2.5-flash", "gem-key")
     assert client.describe_runtime()["active_bucket"] == "api"
+
+
+def test_priority_llm_client_pins_first_successful_candidate(monkeypatch):
+    client = PriorityLLMClient(_llm_config(), _preferences(accelerators=["cuda"]))
+    calls = []
+
+    def fake_client_for_candidate(provider, model, api_key=""):
+        calls.append((provider, model, api_key))
+        if provider == "ollama":
+            return _FakeClient(provider, model, "", error_code="provider_error", error="connection refused")
+        if provider == "gemini":
+            return _FakeClient(provider, model, "api response")
+        return _FakeClient(provider, model, "")
+
+    monkeypatch.setattr(client, "_client_for_candidate", fake_client_for_candidate)
+
+    assert client.chat([{"role": "user", "content": "첫 질문"}]) == "api response"
+    assert client.chat([{"role": "user", "content": "다음 질문"}]) == "api response"
+
+    assert calls == [
+        ("ollama", "qwen2.5:0.5b", ""),
+        ("gemini", "gemini-2.5-flash", "gem-key"),
+        ("gemini", "gemini-2.5-flash", "gem-key"),
+    ]
+    assert client.describe_runtime()["active_bucket"] == "api"
+
+
+def test_priority_llm_client_reselects_after_runtime_reload(monkeypatch):
+    client = PriorityLLMClient(_llm_config(), _preferences(accelerators=["cuda"]))
+    calls = []
+
+    def fake_client_for_candidate(provider, model, api_key=""):
+        calls.append((provider, model, api_key))
+        if provider == "ollama":
+            return _FakeClient(provider, model, "", error_code="provider_error", error="connection refused")
+        if provider == "gemini":
+            return _FakeClient(provider, model, "api response")
+        return _FakeClient(provider, model, "")
+
+    monkeypatch.setattr(client, "_client_for_candidate", fake_client_for_candidate)
+
+    assert client.chat([{"role": "user", "content": "첫 질문"}]) == "api response"
+    client.reload_runtime_preferences(_preferences(accelerators=["cuda"]), _llm_config())
+    assert client.chat([{"role": "user", "content": "다시 질문"}]) == "api response"
+
+    assert calls == [
+        ("ollama", "qwen2.5:0.5b", ""),
+        ("gemini", "gemini-2.5-flash", "gem-key"),
+        ("ollama", "qwen2.5:0.5b", ""),
+        ("gemini", "gemini-2.5-flash", "gem-key"),
+    ]

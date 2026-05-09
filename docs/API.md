@@ -40,6 +40,7 @@ This document describes the current runtime entrypoints and key server modules.
 - `server/src/llm_client.py`
   - Multi-provider LLM wrapper
   - Runtime-verified priority order: `ollama -> api -> ollama_cpu -> other`
+  - Pins the first successful LLM candidate after startup or priority/config reload, so later requests reuse the same route until preferences change
 - `server/src/runtime_preferences.py`
   - Runtime priority defaults, model resolution, hardware detection
 - `server/src/runtime_controller.py`

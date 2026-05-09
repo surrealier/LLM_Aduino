@@ -117,6 +117,7 @@ api 우선순위 gemini > claude > chatgpt
 
 Notes:
 - `Wired > WiFi` is live in `auto` mode, so the server keeps checking both paths and connects to the first healthy link it finds.
+- LLM routing is selected once after startup or priority/config reload. If local Ollama is unavailable and Gemini succeeds, later turns keep using Gemini instead of rechecking Ollama every time.
 - `GPU > CPU` applies directly to STT and local-LLM preference ordering.
 - On macOS, `GPU` priority can still matter for local LLM routing, but the current STT/TTS stack does not run on Apple `MPS`.
 - `ollama_cpu` is a separate runtime bucket, but it becomes a truly separate physical path only when you provide a CPU-only local Ollama instance.
