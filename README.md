@@ -29,7 +29,7 @@ No cloud required. Runs with local Ollama out of the box, or connect to Gemini /
 ## 🎬 Demo
 
 <div align="center">
-<video src="assets/demo_combined.mp4" controls width="740"></video>
+<video src="https://github.com/user-attachments/assets/15ed6265-1afb-4024-ad61-31859c79948b" controls width="740"></video>
 </div>
 
 ## ✅ What You Need
