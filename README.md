@@ -26,6 +26,12 @@ No cloud required. Runs with local Ollama out of the box, or connect to Gemini /
 <img src="assets/summary.png" alt="ccoli system overview" width="700" />
 </div>
 
+## 🎬 Demo
+
+<div align="center">
+<video src="assets/demo_combined.mp4" controls width="740"></video>
+</div>
+
 ## ✅ What You Need
 
 | | Component | Why |
@@ -90,7 +96,7 @@ No extra setup is required for default USB wired mode.
 - Default wired serial speed is `115200` for broad CP210x stability on macOS
 - Wired USB audio uses `8kHz G.711 mu-law` in both directions so mic capture and TTS both fit inside the wired bandwidth budget
 - Arduino IDE upload speed can stay at `115200`; flashing speed and runtime protocol settings are still separate
-- On the first connection, the server temporarily locks mic capture while the welcome TTS is sent, then the firmware reopens it after playback ends
+- On the first connection, the server waits for an ESP32 `PING`/`PONG` handshake before sending the welcome TTS, then brackets playback with `MIC_LOCK`/`MIC_UNLOCK`
 
 Optional robot/display mode:
 - Install Arduino libraries `Adafruit SSD1306` and `Adafruit GFX Library`
@@ -140,7 +146,7 @@ Then connect the Atom Echo to your PC with USB-C.
 - The server preloads STT and TTS once during startup so the first spoken turn does not pay the full model warmup cost.
 - When the web dashboard is enabled, startup logs print the dashboard URL(s) and the `/api/docs` link.
 - LED status: red while waiting for the server link, light green when the device is connected and ready.
-- On the first healthy connection, ccoli speaks a short time-of-day welcome line without calling the LLM, so startup greetings cannot be truncated by model output limits.
+- On the first healthy `PING`/`PONG` handshake, ccoli speaks a short time-of-day welcome line without calling the LLM, so startup greetings cannot be sent before the device is ready or truncated by model output limits.
 - On macOS, the current STT path uses `faster-whisper`, so STT stays on `cpu` rather than Apple `MPS`. The default TTS backend `edge_tts` also does not use local MPS/GPU acceleration.
 
 ### 4. Optional Wi-Fi mode
