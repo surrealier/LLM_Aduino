@@ -342,6 +342,8 @@ ccoli config integration set calendar-google \
 ccoli config integration test calendar-google
 ```
 
+Google Calendar uses OAuth credentials, not a simple API key. See `docs/GOOGLE_CALENDAR_GUIDE.md` for where to enable the API and how to get a refresh token.
+
 Missing keys? The `test` command tells you exactly what to set.
 
 Integration API key 발급:

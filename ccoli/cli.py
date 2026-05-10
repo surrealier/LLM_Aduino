@@ -48,6 +48,13 @@ INTEGRATION_SPECS = {
     },
     "calendar-google": {
         "env_key": None,
+        "env_keys": {
+            "client_id": "GOOGLE_CLIENT_ID",
+            "client_secret": "GOOGLE_CLIENT_SECRET",
+            "refresh_token": "GOOGLE_REFRESH_TOKEN",
+            "calendar_id": "GOOGLE_CALENDAR_ID",
+            "time_zone": "GOOGLE_CALENDAR_TIME_ZONE",
+        },
         "required": ("client_id", "client_secret", "refresh_token"),
         "description": "Google Calendar 연동",
     },
@@ -772,12 +779,24 @@ def _cmd_config_integration_list() -> int:
             configured = bool(env_values.get(spec["env_key"], "").strip())
         else:
             fields = cfg.get("fields", {}) if isinstance(cfg.get("fields"), dict) else {}
-            configured = all(bool(fields.get(field, "").strip()) for field in spec["required"])
+            env_keys = spec.get("env_keys", {})
+            configured = all(
+                bool((env_values.get(env_keys.get(field, ""), "") or fields.get(field, "")).strip())
+                for field in spec["required"]
+            )
         print(f"- {name}: enabled={enabled}, configured={configured} ({spec['description']})")
     return 0
 
 
-def _cmd_config_integration_set(provider: str, api_key: Optional[str], client_id: Optional[str], client_secret: Optional[str], refresh_token: Optional[str]) -> int:
+def _cmd_config_integration_set(
+    provider: str,
+    api_key: Optional[str],
+    client_id: Optional[str],
+    client_secret: Optional[str],
+    refresh_token: Optional[str],
+    calendar_id: Optional[str] = None,
+    time_zone: Optional[str] = None,
+) -> int:
     root = _repo_root()
     provider = provider.lower().strip()
     if provider not in INTEGRATION_SPECS:
@@ -806,10 +825,27 @@ def _cmd_config_integration_set(provider: str, api_key: Optional[str], client_id
             "client_id": client_id,
             "client_secret": client_secret,
             "refresh_token": refresh_token,
+            "calendar_id": calendar_id,
+            "time_zone": time_zone,
         }
         missing = [f"--{field.replace('_', '-')}" for field in spec["required"] if not fields.get(field)]
         if not missing:
-            entry["fields"] = fields
+            env_keys = spec.get("env_keys", {})
+            for field, value in fields.items():
+                if not value:
+                    continue
+                env_key = env_keys.get(field)
+                if env_key:
+                    _upsert_env_var(env_path, env_key, value)
+                    print(f"updated: {env_path} ({env_key}={_mask_secret(value)})")
+            non_secret_fields = {
+                field: value
+                for field, value in fields.items()
+                if value and field in {"calendar_id", "time_zone"}
+            }
+            if non_secret_fields:
+                existing_fields = entry.get("fields", {}) if isinstance(entry.get("fields"), dict) else {}
+                entry["fields"] = {**existing_fields, **non_secret_fields}
 
     if missing:
         print(f"error: missing required options: {', '.join(missing)}", file=sys.stderr)
@@ -865,11 +901,17 @@ def _cmd_config_integration_test(provider: str) -> int:
         return 0
 
     fields = entry.get("fields", {}) if isinstance(entry.get("fields"), dict) else {}
-    missing = [field for field in spec["required"] if not fields.get(field)]
+    env_keys = spec.get("env_keys", {})
+    missing = [
+        field
+        for field in spec["required"]
+        if not (env_values.get(env_keys.get(field, ""), "") or fields.get(field, "")).strip()
+    ]
     if missing:
-        print(f"error: missing fields in config.yaml: {', '.join(missing)}", file=sys.stderr)
+        missing_env = [env_keys.get(field, field) for field in missing]
+        print(f"error: missing calendar OAuth values: {', '.join(missing_env)}", file=sys.stderr)
         return 1
-    print(f"ok: {provider} integration fields configured")
+    print(f"ok: {provider} integration OAuth values configured")
     return 0
 
 
@@ -1277,6 +1319,8 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser.add_argument("--client-id", default=None)
     set_parser.add_argument("--client-secret", default=None)
     set_parser.add_argument("--refresh-token", default=None)
+    set_parser.add_argument("--calendar-id", default=None, help="Google Calendar ID, defaults to primary")
+    set_parser.add_argument("--time-zone", default=None, help="Calendar event time zone, defaults to Asia/Seoul")
 
     enable_parser = integration_sub.add_parser("enable", help="enable an integration")
     enable_parser.add_argument("provider", choices=tuple(INTEGRATION_SPECS.keys()))
@@ -1335,6 +1379,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.client_id,
                 args.client_secret,
                 args.refresh_token,
+                args.calendar_id,
+                args.time_zone,
             )
         if args.integration_command == "enable":
             return _cmd_config_integration_enable(args.provider, True)

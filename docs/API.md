@@ -36,6 +36,10 @@ This document describes the current runtime entrypoints and key server modules.
 - `server/src/agent_mode.py`
   - Agent response orchestration (LLM/TTS/services)
   - Sends deterministic time-of-day connection greetings without an LLM call
+- `server/src/integrations/calendar_google.py`
+  - Google Calendar OAuth refresh-token handling
+  - Calendar Events API list/create/update/delete operations
+  - Setup guide: `docs/GOOGLE_CALENDAR_GUIDE.md`
 - `server/src/robot_mode.py`
   - Robot command parser (currently gated by feature flag)
 - `server/src/llm_client.py`

@@ -11,6 +11,8 @@ from ccoli.cli import (  # noqa: E402
     DEFAULT_LLM_MODELS,
     _apply_setup_choice,
     _build_setup_choice,
+    _cmd_config_integration_set,
+    _cmd_config_integration_test,
     _default_stt_device,
     build_parser,
 )
@@ -168,3 +170,33 @@ def test_apply_setup_choice_updates_config_and_env(tmp_path):
     assert 'PASS = "secret-pass"' in secrets_text
     assert 'SERVER_IP = "192.168.0.20"' in secrets_text
     assert "SERVER_PORT = 5009" in secrets_text
+
+
+def test_calendar_integration_set_writes_oauth_to_env(tmp_path, monkeypatch):
+    root = tmp_path
+    server_dir = root / "server"
+    server_dir.mkdir(parents=True)
+    (server_dir / "config.yaml").write_text("integrations:\n  calendar-google:\n    enabled: false\n", encoding="utf-8")
+    monkeypatch.setattr("ccoli.cli._repo_root", lambda: root)
+
+    result = _cmd_config_integration_set(
+        "calendar-google",
+        api_key=None,
+        client_id="client-id",
+        client_secret="client-secret",
+        refresh_token="refresh-token",
+        calendar_id="primary",
+        time_zone="Asia/Seoul",
+    )
+
+    assert result == 0
+    config = yaml.safe_load((server_dir / "config.yaml").read_text(encoding="utf-8"))
+    entry = config["integrations"]["calendar-google"]
+    assert entry["enabled"] is True
+    assert entry["fields"] == {"calendar_id": "primary", "time_zone": "Asia/Seoul"}
+    env_text = (server_dir / ".env").read_text(encoding="utf-8")
+    assert "GOOGLE_CLIENT_ID=client-id" in env_text
+    assert "GOOGLE_CLIENT_SECRET=client-secret" in env_text
+    assert "GOOGLE_REFRESH_TOKEN=refresh-token" in env_text
+
+    assert _cmd_config_integration_test("calendar-google") == 0

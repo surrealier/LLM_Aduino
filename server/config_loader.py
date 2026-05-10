@@ -287,6 +287,17 @@ class Config:
                 self.config.setdefault("integrations", {}).setdefault("notify-slack", {})["api_key"] = os.environ["SLACK_BOT_TOKEN"]
             if "GOOGLE_MAPS_API_KEY" in os.environ:
                 self.config.setdefault("integrations", {}).setdefault("maps", {})["api_key"] = os.environ["GOOGLE_MAPS_API_KEY"]
+            for env_key, field in (
+                ("GOOGLE_CLIENT_ID", "client_id"),
+                ("GOOGLE_CLIENT_SECRET", "client_secret"),
+                ("GOOGLE_REFRESH_TOKEN", "refresh_token"),
+                ("GOOGLE_CALENDAR_ID", "calendar_id"),
+                ("GOOGLE_CALENDAR_TIME_ZONE", "time_zone"),
+            ):
+                if env_key in os.environ:
+                    self.config.setdefault("integrations", {}).setdefault("calendar-google", {}).setdefault("fields", {})[
+                        field
+                    ] = os.environ[env_key]
             if "TELEGRAM_ENABLED" in os.environ:
                 self.config.setdefault("telegram", {})["enabled"] = _coerce_bool(os.environ["TELEGRAM_ENABLED"])
             if "TELEGRAM_BOT_TOKEN" in os.environ:

@@ -1070,6 +1070,7 @@ def main():
         memory_dir=memory_dir,
         memory_refresh_interval=memory_refresh_interval,
         emotion_system=shared_emotion_system,
+        integration_config=config.get("integrations", default={}),
     )
 
     log.info(

@@ -65,9 +65,11 @@ class AgentMode:
         memory_dir=None,
         memory_refresh_interval=5,
         emotion_system=None,
+        integration_config=None,
     ):
         self.llm = llm_client
         self.tts_voice = tts_voice or "ko-KR-SunHiNeural"
+        self.integration_config = integration_config or {}
 
         # 대화 기록
         self.conversation_history = []
@@ -86,20 +88,56 @@ class AgentMode:
         self.emotion_system = emotion_system or EmotionSystem()
         self.info_services = InfoServices(weather_api_key, lat=lat, lon=lon)
         self.integrations = IntegrationRegistry()
-        self.integrations.register(WeatherIntegration(weather_api_key, lat=lat, lon=lon), enabled=True)
-        self.integrations.register(SearchIntegration(os.getenv("TAVILY_API_KEY", "")), enabled=True)
-        self.integrations.register(NotifyIntegration(os.getenv("SLACK_BOT_TOKEN", "")), enabled=True)
-        self.integrations.register(MapsIntegration(os.getenv("GOOGLE_MAPS_API_KEY", "")), enabled=True)
+        self.integrations.register(
+            WeatherIntegration(weather_api_key, lat=lat, lon=lon),
+            enabled=self._integration_enabled("weather"),
+        )
+        self.integrations.register(
+            SearchIntegration(self._integration_value("search", "api_key", "TAVILY_API_KEY")),
+            enabled=self._integration_enabled("search"),
+        )
+        self.integrations.register(
+            NotifyIntegration(self._integration_value("notify-slack", "api_key", "SLACK_BOT_TOKEN")),
+            enabled=self._integration_enabled("notify-slack"),
+        )
+        self.integrations.register(
+            MapsIntegration(self._integration_value("maps", "api_key", "GOOGLE_MAPS_API_KEY")),
+            enabled=self._integration_enabled("maps"),
+        )
         self.integrations.register(
             GoogleCalendarIntegration(
-                os.getenv("GOOGLE_CLIENT_ID", ""),
-                os.getenv("GOOGLE_CLIENT_SECRET", ""),
-                os.getenv("GOOGLE_REFRESH_TOKEN", ""),
+                self._integration_value("calendar-google", "client_id", "GOOGLE_CLIENT_ID"),
+                self._integration_value("calendar-google", "client_secret", "GOOGLE_CLIENT_SECRET"),
+                self._integration_value("calendar-google", "refresh_token", "GOOGLE_REFRESH_TOKEN"),
+                calendar_id=self._integration_value("calendar-google", "calendar_id", "GOOGLE_CALENDAR_ID") or "primary",
+                time_zone=self._integration_value("calendar-google", "time_zone", "GOOGLE_CALENDAR_TIME_ZONE")
+                or "Asia/Seoul",
             ),
-            enabled=True,
+            enabled=self._integration_enabled("calendar-google"),
         )
         self.proactive = ProactiveInteraction(proactive_enabled, proactive_interval)
         self.scheduler = Scheduler()
+
+    def _integration_entry(self, name: str) -> dict:
+        if not isinstance(self.integration_config, dict):
+            return {}
+        entry = self.integration_config.get(name, {})
+        return entry if isinstance(entry, dict) else {}
+
+    def _integration_enabled(self, name: str) -> bool:
+        entry = self._integration_entry(name)
+        if "enabled" not in entry:
+            return True
+        return bool(entry.get("enabled"))
+
+    def _integration_value(self, name: str, field: str, env_key: str) -> str:
+        env_value = os.getenv(env_key, "").strip()
+        if env_value:
+            return env_value
+        entry = self._integration_entry(name)
+        fields = entry.get("fields", {}) if isinstance(entry.get("fields"), dict) else {}
+        value = fields.get(field, entry.get(field, ""))
+        return str(value or "").strip()
 
     def _sanitize_response(self, text: str) -> str:
         """LLM 응답 후처리: 자기소개/이모지 제거 + 공백 정리"""
@@ -373,7 +411,7 @@ class AgentMode:
                     log.info("Info data for LLM context: %s", info_context)
 
                 schedule_response = self.scheduler.process_schedule_request(text)
-                if schedule_response:
+                if schedule_response and not info_context:
                     info_context = schedule_response if isinstance(schedule_response, str) else str(schedule_response)
 
             self.emotion_system.set_body_state(sleep_mode=self.proactive.sleep_mode)
