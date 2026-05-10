@@ -35,12 +35,14 @@ This document describes the current runtime entrypoints and key server modules.
   - Audio quality checks, trim, normalization
 - `server/src/agent_mode.py`
   - Agent response orchestration (LLM/TTS/services)
+  - Sends deterministic time-of-day connection greetings without an LLM call
 - `server/src/robot_mode.py`
   - Robot command parser (currently gated by feature flag)
 - `server/src/llm_client.py`
   - Multi-provider LLM wrapper
   - Runtime-verified priority order: `ollama -> api -> ollama_cpu -> other`
   - Pins the first successful LLM candidate after startup or priority/config reload, so later requests reuse the same route until preferences change
+  - Disables Gemini thinking with `thinkingBudget: 0` for runtime calls
 - `server/src/runtime_preferences.py`
   - Runtime priority defaults, model resolution, hardware detection
 - `server/src/runtime_controller.py`

@@ -31,22 +31,7 @@ from src.intent_parser import parse_intent
 
 log = logging.getLogger(__name__)
 
-_CONNECTION_GREETING_PROMPT = """\
-방금 음성 디바이스가 홈 에이전트 '콜리'와 다시 연결됐다.
-최근 대화/메모리를 참고해서, 사용자가 듣기에 자연스러운 한국어 한 문장만 만들어라.
-
-규칙:
-- 반드시 "콜리 연결됐어요!"로 시작
-- 이어지는 문장은 최근 대화 흐름을 살짝 이어받는 안부나 질문 1개만 작성
-- 최근 맥락이 부족하면 현재 시간대에 맞는 안부를 사용
-- 설명, 따옴표, 이모지, 줄바꿈 금지
-- 전체는 짧고 가볍게
-
-실시간 최근 대화:
-{recent_context}
-"""
-_CONNECTION_GREETING_MIN_TAIL_CHARS = 4
-_CONNECTION_GREETING_TERMINAL_RE = re.compile(r"[.!?。！？]$")
+AGENT_RESPONSE_MAX_TOKENS = 768
 
 
 class AgentMode:
@@ -343,67 +328,8 @@ class AgentMode:
 
         return f"콜리 연결됐어요! {tail}"
 
-    def _normalize_connection_greeting(self, text: str, now: datetime | None = None) -> str:
-        cleaned = " ".join((text or "").split()).strip()
-        cleaned = self._EMOJI_RE.sub("", cleaned)
-        cleaned = self._EMOJI_META_RE.sub("", cleaned)
-        cleaned = cleaned.replace("\n", " ").replace('"', "").replace("'", "")
-        cleaned = " ".join(cleaned.split()).strip()
-
-        if not cleaned:
-            return self._fallback_connection_greeting(now)
-
-        for _ in range(2):
-            stripped = re.sub(r"^(?:콜리\s*)?연결됐어요[.!?]?\s*", "", cleaned).strip()
-            stripped = stripped.lstrip("!,. ")
-            if stripped == cleaned:
-                break
-            cleaned = stripped
-
-        cleaned = self._sanitize_response(cleaned)
-        if not cleaned:
-            return self._fallback_connection_greeting(now)
-
-        compact = re.sub(r"\s+", "", cleaned)
-        if len(compact) < _CONNECTION_GREETING_MIN_TAIL_CHARS:
-            return self._fallback_connection_greeting(now)
-
-        cleaned = self._complete_connection_greeting_tail(cleaned)
-        return f"콜리 연결됐어요! {cleaned}"
-
-    @staticmethod
-    def _complete_connection_greeting_tail(text: str) -> str:
-        cleaned = (text or "").strip()
-        if not cleaned or _CONNECTION_GREETING_TERMINAL_RE.search(cleaned):
-            return cleaned
-
-        if re.search(r"(신가|인가|건가|던가)$", cleaned):
-            return f"{cleaned}요?"
-        return f"{cleaned}?"
-
     def generate_connection_greeting(self, now: datetime | None = None) -> str:
-        now = now or datetime.now()
-        fallback = self._fallback_connection_greeting(now)
-        if not self.llm:
-            return fallback
-
-        try:
-            system_prompt = self._get_system_prompt()
-            recent_context = self._recent_conversation_excerpt()
-            prompt = _CONNECTION_GREETING_PROMPT.format(recent_context=recent_context)
-            raw = self.llm.chat(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.6,
-                max_tokens=160,
-                think=False,
-            )
-            return self._normalize_connection_greeting(raw, now=now)
-        except Exception as exc:
-            log.warning("Connection greeting generation failed: %s", exc)
-            return fallback
+        return self._fallback_connection_greeting(now)
 
     def _llm_failure_response(self) -> str:
         if not self.llm:
@@ -472,7 +398,7 @@ class AgentMode:
             for conv in history[-self.max_history:]:
                 messages.append({"role": conv["role"], "content": conv["content"]})
 
-            raw = self.llm.chat(messages, temperature=0.8, max_tokens=256)
+            raw = self.llm.chat(messages, temperature=0.8, max_tokens=AGENT_RESPONSE_MAX_TOKENS)
             if raw.strip():
                 intent, clean_text = parse_intent(raw)
                 response = self._sanitize_response(clean_text)

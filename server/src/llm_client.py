@@ -10,6 +10,8 @@ from .runtime_preferences import RuntimePreferences
 
 log = logging.getLogger(__name__)
 ThinkType = Optional[Union[bool, str]]
+GEMINI_THINKING_BUDGET = 0
+LLM_RETRY_TOKEN_CAP = 2048
 
 
 class LLMClient:
@@ -52,8 +54,7 @@ class LLMClient:
         if self.provider != "ollama":
             return self._chat_external(messages, temperature, max_tokens)
         try:
-            if think is None:
-                think = self.default_think
+            think = False
 
             content, done_reason, thinking = self._chat_once(
                 messages,
@@ -64,8 +65,8 @@ class LLMClient:
 
             # 모델이 길이 제한으로 끊긴 경우 한 번 더 크게 재시도
             if content.strip() and done_reason == "length":
-                retry_tokens = min(max(max_tokens * 2, 384), 1024)
-                retry_think = False if think else think
+                retry_tokens = min(max(max_tokens * 2, 384), LLM_RETRY_TOKEN_CAP)
+                retry_think = False
                 log.warning(
                     "Ollama response hit token limit (num_predict=%d). retrying once with %d (think=%s).",
                     max_tokens,
@@ -192,7 +193,7 @@ class LLMClient:
         text, finish_reason = self._chat_gemini_once(messages, temperature, max_tokens)
         used_tokens = max_tokens
         if text and finish_reason == "MAX_TOKENS":
-            retry_tokens = min(max(max_tokens * 2, 384), 1024)
+            retry_tokens = min(max(max_tokens * 2, 384), LLM_RETRY_TOKEN_CAP)
             if retry_tokens > max_tokens:
                 log.warning(
                     "Gemini response hit token limit (maxOutputTokens=%d). retrying once with %d.",
@@ -225,14 +226,20 @@ class LLMClient:
                 mapped_role = "user"
             contents.append({"role": mapped_role, "parts": [{"text": msg.get("content", "")}]} )
 
+        generation_config = {
+            "temperature": temperature,
+            "maxOutputTokens": max_tokens,
+        }
+        if self._gemini_supports_thinking_budget():
+            generation_config["thinkingConfig"] = {
+                "thinkingBudget": GEMINI_THINKING_BUDGET,
+            }
+
         response = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}",
             json={
                 "contents": contents,
-                "generationConfig": {
-                    "temperature": temperature,
-                    "maxOutputTokens": max_tokens,
-                },
+                "generationConfig": generation_config,
             },
             timeout=(5, 120),
         )
@@ -246,6 +253,10 @@ class LLMClient:
         candidate_content = (candidate.get("content") or {}).get("parts") or []
         text = "".join(part.get("text", "") for part in candidate_content if isinstance(part, dict)).strip()
         return text, finish_reason
+
+    def _gemini_supports_thinking_budget(self) -> bool:
+        model = (self.model or "").lower()
+        return "gemini-2.5" in model or "robotics-er" in model
 
     def _chat_once(
         self,

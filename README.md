@@ -140,7 +140,7 @@ Then connect the Atom Echo to your PC with USB-C.
 - The server preloads STT and TTS once during startup so the first spoken turn does not pay the full model warmup cost.
 - When the web dashboard is enabled, startup logs print the dashboard URL(s) and the `/api/docs` link.
 - LED status: red while waiting for the server link, light green when the device is connected and ready.
-- On the first healthy connection, ccoli speaks a short welcome line that picks up the recent conversation context when possible.
+- On the first healthy connection, ccoli speaks a short time-of-day welcome line without calling the LLM, so startup greetings cannot be truncated by model output limits.
 - On macOS, the current STT path uses `faster-whisper`, so STT stays on `cpu` rather than Apple `MPS`. The default TTS backend `edge_tts` also does not use local MPS/GPU acceleration.
 
 ### 4. Optional Wi-Fi mode
@@ -228,7 +228,7 @@ Choose your cloud provider
   3. chatgpt - OpenAI ChatGPT
 Select [1]: 1
 
-Model name [gemini-1.5-flash]:
+Model name [gemini-2.5-flash]:
 Choose STT device
   1. cpu   - Best default for macOS and general compatibility
   2. cuda  - Use NVIDIA CUDA when available
@@ -242,7 +242,7 @@ Select [1]: 1
 Setup Plan
 - Install target: api
 - Provider: gemini
-- Model: gemini-1.5-flash
+- Model: gemini-2.5-flash
 - STT device: cpu
 - Device connection: wired
 - Server port: 5001
@@ -271,7 +271,7 @@ Default is Ollama (local, no API key). Switch anytime:
 ```bash
 ccoli setup
 ccoli config llm --provider ollama --model qwen3:8b
-ccoli config llm --provider gemini --model gemini-1.5-flash --api-key <GEMINI_API_KEY>
+ccoli config llm --provider gemini --model gemini-2.5-flash --api-key <GEMINI_API_KEY>
 ccoli config llm --provider claude --model claude-3-5-haiku-latest --api-key <ANTHROPIC_API_KEY>
 ccoli config llm --provider chatgpt --model gpt-4o-mini --api-key <OPENAI_API_KEY>
 ```
@@ -315,6 +315,8 @@ api 우선순위 gemini > claude > chatgpt
 When `connection.mode` is `auto`, the server keeps checking both `Wired` and `WiFi` live and binds to the first healthy link that appears while still honoring the current priority order.
 
 LLM priority is resolved on the first LLM request after startup or priority/config reload. If a higher-priority route such as local Ollama is unavailable and Gemini succeeds, later turns go directly to Gemini instead of rechecking Ollama on every message.
+
+For voice latency and stable TTS, LLM thinking is disabled in runtime calls. Gemini requests send `thinkingBudget: 0`, and regular agent responses use a larger output budget to avoid short Korean replies being cut mid-sentence.
 
 `ollama_cpu` is a distinct fallback bucket in runtime policy, but a single shared Ollama server cannot be forced to switch GPU/CPU per request. To make that bucket physically separate, point it at a dedicated CPU-only local Ollama instance.
 

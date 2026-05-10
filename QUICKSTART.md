@@ -62,7 +62,7 @@ Then connect the Atom Echo to your PC with USB-C.
 - The server preloads STT and TTS during startup so the first turn avoids the cold-start model penalty.
 - If the web dashboard is enabled and its dependencies are installed, startup logs print the dashboard URL(s) and the `/api/docs` link.
 - LED status: red before the server link is ready, light green once the server connection is healthy.
-- On the first healthy connection, ccoli plays a short contextual welcome greeting.
+- On the first healthy connection, ccoli plays a short time-of-day welcome greeting without calling the LLM.
 
 Optional temporary port override:
 
@@ -118,6 +118,7 @@ api 우선순위 gemini > claude > chatgpt
 Notes:
 - `Wired > WiFi` is live in `auto` mode, so the server keeps checking both paths and connects to the first healthy link it finds.
 - LLM routing is selected once after startup or priority/config reload. If local Ollama is unavailable and Gemini succeeds, later turns keep using Gemini instead of rechecking Ollama every time.
+- Runtime LLM thinking is disabled for voice responses. Gemini calls send `thinkingBudget: 0`, and regular agent responses use a larger output token budget to reduce mid-sentence truncation.
 - `GPU > CPU` applies directly to STT and local-LLM preference ordering.
 - On macOS, `GPU` priority can still matter for local LLM routing, but the current STT/TTS stack does not run on Apple `MPS`.
 - `ollama_cpu` is a separate runtime bucket, but it becomes a truly separate physical path only when you provide a CPU-only local Ollama instance.

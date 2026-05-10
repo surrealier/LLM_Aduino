@@ -87,13 +87,11 @@ def test_chat_uses_generate_fallback_when_stream_is_empty(monkeypatch):
     assert result == "대체 응답"
 
 
-def test_chat_retries_with_think_false_when_content_empty_but_thinking_exists(monkeypatch):
+def test_chat_forces_think_false_even_when_requested(monkeypatch):
     calls = []
 
     def fake_chat_once(messages, temperature, max_tokens, think=True):
         calls.append((max_tokens, think))
-        if len(calls) == 1:
-            return "", "stop", "긴 추론 텍스트"
         return "최종 답변", "stop", ""
 
     client = LLMClient("http://localhost:11434", "qwen3:8b")
@@ -108,18 +106,17 @@ def test_chat_retries_with_think_false_when_content_empty_but_thinking_exists(mo
     )
 
     assert result == "최종 답변"
-    assert calls[0] == (256, True)
-    assert calls[1] == (384, False)
+    assert calls == [(256, False)]
 
 
-def test_chat_uses_client_default_think(monkeypatch):
+def test_chat_ignores_client_default_think(monkeypatch):
     calls = []
 
     def fake_chat_once(messages, temperature, max_tokens, think=True):
         calls.append((max_tokens, think))
         return "응답", "stop", ""
 
-    client = LLMClient("http://localhost:11434", "qwen3:8b", default_think=False)
+    client = LLMClient("http://localhost:11434", "qwen3:8b", default_think=True)
     monkeypatch.setattr(client, "_chat_once", fake_chat_once)
 
     result = client.chat(
@@ -192,12 +189,31 @@ def test_gemini_provider_calls_google_api(monkeypatch):
         )
 
     monkeypatch.setattr("src.llm_client.requests.post", fake_post)
-    client = LLMClient("", "gemini-1.5-flash", provider="gemini", api_key="gem-key")
+    client = LLMClient("", "gemini-2.5-flash", provider="gemini", api_key="gem-key")
 
     result = client.chat([{"role": "user", "content": "안녕"}], temperature=0.4, max_tokens=80)
 
     assert result == "Gemini 응답"
     assert "generativelanguage.googleapis.com" in captured["url"]
+    assert captured["json"]["generationConfig"]["thinkingConfig"]["thinkingBudget"] == 0
+
+
+def test_gemini_legacy_model_omits_thinking_config(monkeypatch):
+    captured = {}
+
+    def fake_post(url, json=None, timeout=None):
+        captured["json"] = json
+        return _JsonResponse(
+            {"candidates": [{"content": {"parts": [{"text": "Gemini 응답"}]}}]}
+        )
+
+    monkeypatch.setattr("src.llm_client.requests.post", fake_post)
+    client = LLMClient("", "gemini-1.5-flash", provider="gemini", api_key="gem-key")
+
+    result = client.chat([{"role": "user", "content": "안녕"}], temperature=0.4, max_tokens=80)
+
+    assert result == "Gemini 응답"
+    assert "thinkingConfig" not in captured["json"]["generationConfig"]
 
 
 def test_gemini_retries_once_when_response_hits_max_tokens(monkeypatch):
@@ -228,7 +244,7 @@ def test_gemini_retries_once_when_response_hits_max_tokens(monkeypatch):
         )
 
     monkeypatch.setattr("src.llm_client.requests.post", fake_post)
-    client = LLMClient("", "gemini-1.5-flash", provider="gemini", api_key="gem-key")
+    client = LLMClient("", "gemini-2.5-flash", provider="gemini", api_key="gem-key")
 
     result = client.chat([{"role": "user", "content": "인사해줘"}], temperature=0.4, max_tokens=80)
 

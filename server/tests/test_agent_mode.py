@@ -81,85 +81,17 @@ def test_history_for_user_separated():
     assert len(h2) == 0
 
 
-def test_generate_connection_greeting_uses_llm_context_and_prefix():
-    class _FakeMemory:
-        def build_system_prompt(self):
-            return "기억된 메모"
-
-    class _FakeLLM:
-        def __init__(self):
-            self.messages = None
-            self.kwargs = None
-
-        def chat(self, messages, **kwargs):
-            self.messages = messages
-            self.kwargs = kwargs
-            return "아직 일하고 계세요?"
-
-    agent = _make_agent()
-    agent.memory = _FakeMemory()
-    agent.llm = _FakeLLM()
-    agent.conversation_history = [{"role": "user", "content": "오늘 회의 많아서 바빠"}]
-
-    greeting = agent.generate_connection_greeting()
-
-    assert greeting == "콜리 연결됐어요! 아직 일하고 계세요?"
-    assert "실시간 최근 대화" in agent.llm.messages[1]["content"]
-    assert agent.llm.kwargs["max_tokens"] == 160
-
-
-def test_generate_connection_greeting_accepts_llm_prefix_once():
-    class _FakeMemory:
-        def build_system_prompt(self):
-            return "기억된 메모"
-
+def test_generate_connection_greeting_uses_time_template_without_llm():
     class _FakeLLM:
         def chat(self, messages, **kwargs):
-            return "콜리 연결됐어요! 아직 일하고 계세요?"
+            raise AssertionError("connection greeting should not call LLM")
 
     agent = _make_agent()
-    agent.memory = _FakeMemory()
     agent.llm = _FakeLLM()
 
-    greeting = agent.generate_connection_greeting()
+    greeting = agent.generate_connection_greeting(now=datetime(2026, 3, 17, 22, 0))
 
-    assert greeting == "콜리 연결됐어요! 아직 일하고 계세요?"
-
-
-def test_generate_connection_greeting_falls_back_when_llm_tail_is_fragment():
-    class _FakeMemory:
-        def build_system_prompt(self):
-            return "기억된 메모"
-
-    class _FakeLLM:
-        def chat(self, messages, **kwargs):
-            return "콜리 연결됐어요! 콜"
-
-    agent = _make_agent()
-    agent.memory = _FakeMemory()
-    agent.llm = _FakeLLM()
-
-    greeting = agent.generate_connection_greeting(now=datetime(2026, 3, 17, 8, 0))
-
-    assert greeting == "콜리 연결됐어요! 잠 잘 주무셨어요?"
-
-
-def test_generate_connection_greeting_completes_unpunctuated_question_tail():
-    class _FakeMemory:
-        def build_system_prompt(self):
-            return "기억된 메모"
-
-    class _FakeLLM:
-        def chat(self, messages, **kwargs):
-            return "콜리 연결됐어요! 편안한 밤 보내고 계신가"
-
-    agent = _make_agent()
-    agent.memory = _FakeMemory()
-    agent.llm = _FakeLLM()
-
-    greeting = agent.generate_connection_greeting()
-
-    assert greeting == "콜리 연결됐어요! 편안한 밤 보내고 계신가요?"
+    assert greeting == "콜리 연결됐어요! 오늘 하루는 어떠셨어요?"
 
 
 def test_generate_connection_greeting_falls_back_by_time():
@@ -169,3 +101,58 @@ def test_generate_connection_greeting_falls_back_by_time():
     greeting = agent.generate_connection_greeting(now=datetime(2026, 3, 17, 8, 0))
 
     assert greeting == "콜리 연결됐어요! 잠 잘 주무셨어요?"
+
+
+def test_generate_response_uses_expanded_token_budget():
+    class _FakeLLM:
+        def __init__(self):
+            self.kwargs = None
+
+        def chat(self, messages, **kwargs):
+            self.kwargs = kwargs
+            return "좋아요."
+
+    class _FakeProactive:
+        sleep_mode = False
+
+        def update_interaction(self):
+            pass
+
+    class _FakeEmotion:
+        def set_body_state(self, **kwargs):
+            pass
+
+        def analyze_emotion(self, text, speaker_id="default"):
+            return "neutral"
+
+    class _FakeScheduler:
+        def process_schedule_request(self, text):
+            return None
+
+    class _FakeInfo:
+        def process_info_request(self, text):
+            return None
+
+    class _FakeMemory:
+        def build_system_prompt(self):
+            return "system"
+
+        def after_turn(self, history):
+            pass
+
+    agent = _make_agent()
+    agent.llm = _FakeLLM()
+    agent.proactive = _FakeProactive()
+    agent.emotion_system = _FakeEmotion()
+    agent.scheduler = _FakeScheduler()
+    agent.info_services = _FakeInfo()
+    agent.memory = _FakeMemory()
+    agent.user_histories = {}
+    agent.max_history = 20
+    agent.conversation_count = 0
+
+    response, intent = agent.generate_response("안녕")
+
+    assert response == "좋아요."
+    assert intent == "none"
+    assert agent.llm.kwargs["max_tokens"] == 768
